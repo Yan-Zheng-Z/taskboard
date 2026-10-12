@@ -27,4 +27,4 @@
 
 - [x] 5.1 用本机真实数据的副本验证迁移：任务数、步骤数、完成状态与迁移前一致，备份文件生成；确认后在真实数据上启动新版本
 - [x] 5.2 用 `review-frontend-production` 快速体检新界面，结果追加到 `docs/quick-review.md`，修复 P0 至 P2 问题
-- [ ] 5.3 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过
+- [x] 5.3 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过

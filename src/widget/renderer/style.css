@@ -221,13 +221,6 @@ input[type="date"] { flex: 1 1 120px; }
 input[type="time"] { flex: 0 1 90px; }
 input:disabled { opacity: 0.5; }
 
-input[type="range"] {
-  width: 100%;
-  height: 16px;
-  margin: 6px 0 2px;
-  accent-color: var(--ink);
-}
-
 .row {
   display: flex;
   flex-wrap: wrap;
