@@ -1,4 +1,5 @@
 // Stands in for a coding agent in the organize tests. The mode is the first argument.
+import fs from 'node:fs';
 import { update } from '../../src/core/store.js';
 import { addSuggestion } from '../../src/core/model.js';
 
@@ -15,5 +16,7 @@ if (mode === 'three') {
   console.error('boom: the agent could not run');
   process.exit(3);
 } else if (mode === 'hang') {
+  // Leaves its pid behind so a test can check that it was really stopped.
+  if (process.env.FAKE_AGENT_PID_FILE) fs.writeFileSync(process.env.FAKE_AGENT_PID_FILE, String(process.pid));
   setInterval(() => {}, 1000);
 }

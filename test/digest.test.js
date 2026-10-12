@@ -170,6 +170,13 @@ test('conversations are ordered by most recent activity and can be limited to on
   assert.deepEqual(digest(homes, { agents: ['claude'] }).conversations.map((c) => c.agent), ['claude']);
 });
 
+test('conversations without message times sort after dated ones', (t) => {
+  const homes = useTempAgents(t);
+  writeClaudeSession(homes.claudeHome, 'undated', [claudeUser('没有时间的消息', { timestamp: undefined })], { now: NOW });
+  writeClaudeSession(homes.claudeHome, 'dated', [claudeUser('有时间的消息', { timestamp: '2026-10-11T08:00:00.000Z' })], { now: NOW });
+  assert.deepEqual(digest(homes).conversations.map((c) => c.messages[0].text), ['有时间的消息', '没有时间的消息']);
+});
+
 test('when the total is too large the oldest conversations are dropped and counted', (t) => {
   const homes = useTempAgents(t);
   const big = Array.from({ length: LIMITS.messagesPerConversation }, () => claudeUser('字'.repeat(LIMITS.messageChars)));

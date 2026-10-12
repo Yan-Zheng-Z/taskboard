@@ -57,34 +57,48 @@ function countSuggestions() {
   }
 }
 
-// onChild receives the child process so the caller can stop it early.
-function runOnce({ command, args, env: extraEnv }, baseEnv, timeoutMs, onChild) {
+// Stops the process and everything it started. On Windows a .cmd launcher runs under cmd.exe,
+// and killing only that wrapper would leave the real agent running.
+function stopTree(child) {
+  if (process.platform === 'win32' && child.pid) {
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+      .on('error', () => child.kill());
+  } else {
+    child.kill();
+  }
+}
+
+// Resolves with { ok } or { ok: false, reason }. onStop receives a function that ends the run early.
+function runOnce({ command, args, env: extraEnv }, baseEnv, timeoutMs, onStop) {
   const env = { ...baseEnv, ...extraEnv };
   return new Promise((resolve) => {
     // A .cmd launcher only runs through the shell; the arguments are fixed text (see above).
-    const viaShell = /\.(cmd|bat)$/i.test(command);
+    const viaShell = /.(cmd|bat)$/i.test(command);
     const child = viaShell
       ? spawn(`"${command}" ${args.map((arg) => `"${arg}"`).join(' ')}`, { env, shell: true, windowsHide: true })
       : spawn(command, args, { env, windowsHide: true });
-    onChild(child);
     let errorText = '';
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    // Does not wait for the process to report that it closed: a stuck child must not keep the run open.
+    const stop = (reason) => {
+      stopTree(child);
+      finish({ ok: false, reason });
+    };
+    const timer = setTimeout(() => stop(`timed out after ${Math.round(timeoutMs / 1000)} seconds`), timeoutMs);
+    onStop(stop);
     child.stdin?.end();
     child.stdout?.resume();
     child.stderr?.on('data', (chunk) => { errorText = (errorText + chunk).slice(-400); });
-    child.on('error', (error) => {
-      clearTimeout(timer);
-      resolve({ ok: false, reason: error.message });
-    });
+    child.on('error', (error) => finish({ ok: false, reason: error.message }));
     child.on('close', (code) => {
-      clearTimeout(timer);
-      if (timedOut) resolve({ ok: false, reason: `timed out after ${Math.round(timeoutMs / 1000)} seconds` });
-      else if (code !== 0) resolve({ ok: false, reason: errorText.trim() || `exited with code ${code}` });
-      else resolve({ ok: true });
+      if (code === 0) finish({ ok: true });
+      else finish({ ok: false, reason: errorText.trim() || `exited with code ${code}` });
     });
   });
 }
@@ -95,7 +109,7 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
   let added = 0;
   let reason = null;
   let running = null;
-  let child = null;
+  let stop = null;
 
   const set = (next) => {
     ({ phase, added = 0, reason = null } = next);
@@ -120,7 +134,7 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
     },
     // Stops a run in progress, for when the app quits.
     cancel() {
-      child?.kill();
+      stop?.('cancelled');
     },
     close() {
       if (phase !== 'running') set({ phase: 'idle' });
@@ -131,9 +145,9 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
       markOrganizeOffered();
       const before = countSuggestions();
       set({ phase: 'running' });
-      running = runOnce(launch, env, timeoutMs, (started) => { child = started; }).then((result) => {
+      running = runOnce(launch, env, timeoutMs, (stopRun) => { stop = stopRun; }).then((result) => {
         running = null;
-        child = null;
+        stop = null;
         if (result.ok) set({ phase: 'done', added: Math.max(0, countSuggestions() - before) });
         else set({ phase: 'failed', reason: result.reason });
       });

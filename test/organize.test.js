@@ -214,3 +214,18 @@ test('cancel stops a run in progress so no agent process is left behind', async 
   assert.ok(Date.now() - started < 5000);
   assert.notEqual(instance.view(readState()).phase, 'running');
 });
+
+test('on Windows a run started through a .cmd launcher is fully stopped on timeout', { skip: process.platform !== 'win32' }, async (t) => {
+  const dir = useTempHome(t);
+  const pidFile = path.join(dir, 'agent.pid');
+  const launcher = path.join(dir, 'claude.cmd');
+  fs.writeFileSync(launcher, `@echo off\r\n"${process.execPath}" "${fake}" hang\r\n`);
+  const { instance } = organizer({ command: launcher, args: [], env: { FAKE_AGENT_PID_FILE: pidFile } }, { timeoutMs: 1500 });
+  const started = Date.now();
+  await instance.start();
+  assert.equal(instance.view(readState()).phase, 'failed');
+  assert.ok(Date.now() - started < 8000, 'the run ended soon after the time limit');
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.throws(() => process.kill(pid, 0), 'the agent process behind the launcher is gone');
+});

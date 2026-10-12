@@ -51,7 +51,8 @@ export function buildDigest({ claudeHome, dshHome, days, agents, now }) {
     all.push(...result.conversations.map(tidy).filter(active));
     if (result.skipped > 0) skipped.push({ agent, records: result.skipped });
   }
-  all.sort((a, b) => String(b.lastActive).localeCompare(String(a.lastActive)));
+  // Most recent first; conversations without message times go last.
+  all.sort((a, b) => (b.lastActive ?? '').localeCompare(a.lastActive ?? ''));
 
   // Keep the most recent conversations that fit; count the rest.
   const conversations = [];
