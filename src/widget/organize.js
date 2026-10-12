@@ -37,9 +37,33 @@ export const ORGANIZE_PROMPT = [
   'Run no commands other than task. When finished, reply with one short line.',
 ].join(' ');
 
+// Where command-line tools commonly live under a home directory, plus the usual system
+// folders on macOS and Linux. An app started at login (not from a terminal) gets a short
+// PATH that leaves these out. Returns nothing when the environment does not say where home is.
+export function commonBinDirs(env) {
+  const home = env.HOME || env.USERPROFILE;
+  if (!home) return [];
+  const dirs = [path.join(home, '.local', 'bin'), path.join(home, '.npm-global', 'bin'), path.join(home, '.claude', 'local')];
+  if (process.platform !== 'win32') dirs.push('/opt/homebrew/bin', '/usr/local/bin');
+  return dirs;
+}
+
+const pathDirs = (env) => (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
+
+// The environment for the agent we start: the same, with the common folders added to PATH
+// so that it can find `task` (and node) even when taskboard itself was started at login.
+export function withCommonPaths(env) {
+  const extra = commonBinDirs(env).filter((dir) => !pathDirs(env).includes(dir));
+  if (extra.length === 0) return { ...env };
+  const copy = { ...env, PATH: [...pathDirs(env), ...extra].join(path.delimiter) };
+  delete copy.Path; // Windows may spell it either way; keep one
+  return copy;
+}
+
+// Looks on PATH first, then in the common install folders.
 export function findClaude(env) {
   const names = process.platform === 'win32' ? ['claude.exe', 'claude.cmd'] : ['claude'];
-  for (const dir of (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean)) {
+  for (const dir of [...pathDirs(env), ...commonBinDirs(env)]) {
     for (const name of names) {
       const candidate = path.join(dir, name);
       try {
@@ -104,7 +128,7 @@ function stopTree(child) {
 
 // Resolves with { ok } or { ok: false, reason }. onStop receives a function that ends the run early.
 function runOnce({ command, args, env: extraEnv }, baseEnv, timeoutMs, onStop) {
-  const env = { ...baseEnv, ...extraEnv };
+  const env = { ...withCommonPaths(baseEnv), ...extraEnv };
   return new Promise((resolve) => {
     // A .cmd launcher only runs through the shell; the arguments are fixed text (see above).
     const viaShell = /.(cmd|bat)$/i.test(command);

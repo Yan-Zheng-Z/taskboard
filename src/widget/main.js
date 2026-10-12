@@ -1,8 +1,10 @@
 // Electron main process for the widget.
 
 import { app, Menu, Tray, nativeImage } from 'electron';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createWidgetWindow, connectWindow, keepAliveOnClose } from './window.js';
+import { fileAutostart } from './autostart.js';
 
 const appDir = fileURLToPath(new URL('../../', import.meta.url));
 const iconFile = fileURLToPath(new URL('../../assets/icon.png', import.meta.url));
@@ -22,7 +24,12 @@ function toggleWindow() {
 }
 
 // Start-at-login launches this Electron binary with the app directory as its argument.
+// Windows keeps that in the system login items; macOS and Linux need a file (see autostart.js).
 const loginItem = () => ({ path: process.execPath, args: [appDir] });
+const autostart = fileAutostart({ platform: process.platform, home: os.homedir(), exec: process.execPath, appDir }) ?? {
+  get: () => app.getLoginItemSettings(loginItem()).openAtLogin,
+  set: (enabled) => app.setLoginItemSettings({ ...loginItem(), openAtLogin: enabled }),
+};
 
 function buildTrayMenu() {
   return Menu.buildFromTemplate([
@@ -30,9 +37,9 @@ function buildTrayMenu() {
     {
       label: '开机自动启动',
       type: 'checkbox',
-      checked: app.getLoginItemSettings(loginItem()).openAtLogin,
+      checked: autostart.get(),
       click: (item) => {
-        app.setLoginItemSettings({ ...loginItem(), openAtLogin: item.checked });
+        autostart.set(item.checked);
         tray.setContextMenu(buildTrayMenu());
         refreshPage(); // the settings page shows the same switch
       },
@@ -43,6 +50,8 @@ function buildTrayMenu() {
 }
 
 function start() {
+  // The widget lives in the menu bar on macOS, like the tray elsewhere: no Dock icon.
+  if (process.platform === 'darwin') app.dock?.hide();
   window = createWidgetWindow();
   keepAliveOnClose(window);
 
@@ -52,14 +61,15 @@ function start() {
   tray.on('click', toggleWindow);
 
   // Start-at-login can be switched from the tray menu and from the settings page; keep them in step.
-  const autostart = {
-    get: () => app.getLoginItemSettings(loginItem()).openAtLogin,
-    set: (enabled) => {
-      app.setLoginItemSettings({ ...loginItem(), openAtLogin: enabled });
-      tray.setContextMenu(buildTrayMenu());
+  const stop = connectWindow(window, {
+    autostart: {
+      get: autostart.get,
+      set: (enabled) => {
+        autostart.set(enabled);
+        tray.setContextMenu(buildTrayMenu());
+      },
     },
-  };
-  const stop = connectWindow(window, { autostart });
+  });
   refreshPage = stop.refresh;
   app.on('will-quit', stop);
 }

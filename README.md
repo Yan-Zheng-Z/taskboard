@@ -20,7 +20,7 @@
 
 ### 安装
 
-需要 [Node.js](https://nodejs.org/) 22.12 或更高版本和 Git。
+需要 [Node.js](https://nodejs.org/) 22.15 或更高版本和 Git。
 
 ```
 git clone https://github.com/zyz122302-lang/taskboard.git
@@ -157,7 +157,7 @@ Early release. Tested on Windows 11 only. The code avoids Windows-only APIs, but
 
 ### Install
 
-Requires [Node.js](https://nodejs.org/) 22.12 or later and Git.
+Requires [Node.js](https://nodejs.org/) 22.15 or later and Git.
 
 ```
 git clone https://github.com/zyz122302-lang/taskboard.git
