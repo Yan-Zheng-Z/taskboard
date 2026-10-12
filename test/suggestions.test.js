@@ -29,7 +29,7 @@ test('addSuggestion saves name, due date, steps, source and author', () => {
     name: '写论文第二章', due: '2026-10-20', steps: ['收集文献', '写初稿'], source: '10-11 论文项目的对话', by: 'claude',
   }, NOW);
   assert.deepEqual(saved, {
-    id: 1, name: '写论文第二章', due: '2026-10-20', steps: ['收集文献', '写初稿'], source: '10-11 论文项目的对话', by: 'claude', createdAt: NOW,
+    id: 1, name: '写论文第二章', due: '2026-10-20', steps: [{ name: '收集文献', done: false }, { name: '写初稿', done: false }], source: '10-11 论文项目的对话', by: 'claude', createdAt: NOW,
   });
   assert.deepEqual(pendingSuggestions(data), [saved]);
   assert.equal(data.tasks.length, 0);
@@ -130,7 +130,7 @@ test('suggest saves a suggestion, prints its id, and does not create a task', (t
   assert.equal(result.code, 0);
   assert.match(result.out, /\b1\b/);
   const [saved] = pendingSuggestions(load());
-  assert.deepEqual([saved.name, saved.due, saved.steps, saved.source, saved.by], ['写论文第二章', '2026-10-20', ['收集文献', '写初稿'], '10-11 论文项目的对话', 'claude']);
+  assert.deepEqual([saved.name, saved.due, saved.steps.map((s) => s.name), saved.source, saved.by], ['写论文第二章', '2026-10-20', ['收集文献', '写初稿'], '10-11 论文项目的对话', 'claude']);
   assert.match(task(['list']).out, /no tasks/i);
 });
 
@@ -199,4 +199,64 @@ test('help mentions the suggestion commands', (t) => {
   useTempHome(t);
   const { out } = task(['--help']);
   for (const word of ['suggest', 'suggestions', 'accept', 'dismiss']) assert.ok(out.includes(word), word);
+});
+
+// ---- steps that are already done ----
+
+test('a suggestion can mark some steps as already done, keeping their order', () => {
+  const { saved } = addSuggestion(emptyData(), {
+    name: '搭建并发布 taskboard',
+    steps: [{ name: '调研', done: true }, { name: '实现第一版', done: true }, '开源上传 GitHub'],
+    by: 'claude',
+  }, NOW);
+  assert.deepEqual(saved.steps, [
+    { name: '调研', done: true }, { name: '实现第一版', done: true }, { name: '开源上传 GitHub', done: false },
+  ]);
+});
+
+test('accepting creates done steps at 100% signed by whoever suggested them', () => {
+  const data = emptyData();
+  const { saved } = addSuggestion(data, {
+    name: 'p', steps: [{ name: 'a', done: true }, { name: 'b', done: true }, { name: 'c', done: false }], by: 'claude',
+  }, NOW);
+  const created = acceptSuggestion(data, saved.id, NOW);
+  assert.deepEqual(created.steps.map((s) => [s.name, s.percent, s.updatedBy]), [['a', 100, 'claude'], ['b', 100, 'claude'], ['c', 0, null]]);
+  assert.equal(Math.round((100 + 100 + 0) / 3), 67);
+});
+
+test('suggestions saved before steps had a done flag still read and accept correctly', () => {
+  const data = { version: 1, nextTaskId: 1, tasks: [], nextSuggestionId: 2, suggestions: [{ id: 1, name: 'old', due: null, steps: ['x', 'y'], source: null, by: 'claude', createdAt: NOW }] };
+  assert.deepEqual(pendingSuggestions(data)[0].steps, [{ name: 'x', done: false }, { name: 'y', done: false }]);
+  assert.deepEqual(acceptSuggestion(data, 1, NOW).steps.map((s) => [s.name, s.percent]), [['x', 0], ['y', 0]]);
+});
+
+test('--done-step and --step keep the order they were given in', (t) => {
+  useTempHome(t);
+  const result = task(['suggest', '搭建并发布 taskboard', '--done-step', '调研现成项目', '--step', '写文档', '--done-step', '实现第一版', '--step', '开源上传 GitHub', '--by', 'claude']);
+  assert.equal(result.code, 0);
+  assert.deepEqual(pendingSuggestions(load())[0].steps, [
+    { name: '调研现成项目', done: true }, { name: '写文档', done: false }, { name: '实现第一版', done: true }, { name: '开源上传 GitHub', done: false },
+  ]);
+});
+
+test('suggestions shows which steps are done, in text and JSON', (t) => {
+  useTempHome(t);
+  task(['suggest', 'p', '--done-step', '做完的', '--step', '没做的']);
+  const { out } = task(['suggestions']);
+  assert.ok(out.includes('[x] 做完的'));
+  assert.ok(out.includes('[ ] 没做的'));
+  assert.deepEqual(JSON.parse(task(['suggestions', '--json']).out).suggestions[0].steps, [{ name: '做完的', done: true }, { name: '没做的', done: false }]);
+});
+
+test('accept reports progress from the done steps', (t) => {
+  useTempHome(t);
+  task(['suggest', 'p', '--done-step', 'a', '--done-step', 'b', '--step', 'c', '--by', 'claude']);
+  task(['accept', '1']);
+  assert.match(task(['list']).out, /67%/);
+  assert.equal(load().tasks[0].steps[0].updatedBy, 'claude');
+});
+
+test('help mentions --done-step', (t) => {
+  useTempHome(t);
+  assert.ok(task(['--help']).out.includes('--done-step'));
 });

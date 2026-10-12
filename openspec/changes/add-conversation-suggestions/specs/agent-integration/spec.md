@@ -3,14 +3,18 @@
 ## ADDED Requirements
 
 ### Requirement: 从对话整理任务的约定
-接入说明 SHALL 规定：用户要求从对话里整理任务时，Agent 先用 `task digest` 读取摘要、用 `task list` 和 `task suggestions` 了解现有内容，再用 `task suggest` 逐条提出建议并写明来源。Agent MUST NOT 在这个流程里直接创建正式任务。
+接入说明 SHALL 规定：用户要求从对话里整理任务时，Agent 先用 `task digest` 读取摘要、用 `task list` 和 `task suggestions` 了解现有内容，再用 `task suggest` 逐条提出建议并写明来源。Agent MUST NOT 在这个流程里直接创建正式任务。接入说明 SHALL 规定一条建议对应一整件事（一个项目或目标）而不是单个下一步动作：名称写总体目标，步骤写主要阶段并区分已完成和待做，同一项目的多个对话合并为一条。
+
+#### Scenario: 一个项目一条建议
+- **WHEN** 摘要里有一个做了很多天、只剩最后一步的项目
+- **THEN** Agent 提出一条以该项目目标命名的建议，步骤里包含已完成的阶段和剩下的那一步，而不是只把最后一步当作任务
 
 #### Scenario: 用户说"整理一下任务"
 - **WHEN** 用户让 Agent 从最近的对话里整理任务
 - **THEN** Agent 提出的每一项都进入建议区并带有来源说明，任务列表没有被直接改动
 
-#### Scenario: 只提出还没做完的事
-- **WHEN** 摘要里某件事在对话中已经明确完成
+#### Scenario: 整个项目都已完成
+- **WHEN** 摘要里某个项目的所有阶段在对话中都已明确完成
 - **THEN** Agent 不为它提出建议
 
 ### Requirement: 按用户要求直接添加任务

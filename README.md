@@ -69,12 +69,12 @@ task rm 1
 
 ### 建议：让 Agent 从对话里找任务
 
-Agent 自己归纳出来的任务不会直接进列表，而是先成为"建议"，由你决定。
+Agent 自己归纳出来的任务不会直接进列表，而是先成为"建议"，由你决定。一条建议是一整件事（一个项目或目标），步骤是它的主要阶段，其中已经做完的可以用 `--done-step` 标出。
 
 ```
-task suggest "交报销单" --due 2026-10-16 --step "填表" --step "找发票" --source "10-12 的对话" --by claude
+task suggest "搭建并发布 taskboard" --done-step "调研现成项目" --done-step "实现第一版" --step "开源上传 GitHub" --source "10-12 的对话" --by claude
 task suggestions              # 待处理的建议
-task accept 1                 # 采纳：变成正式任务，带上步骤
+task accept 1                 # 采纳：变成正式任务；--done-step 的步骤直接是 100%
 task dismiss 2                # 忽略：以后同名的建议不会再出现
 ```
 
@@ -187,12 +187,12 @@ On failure the command exits non-zero and writes the reason to standard error.
 
 ### Suggestions: letting an agent find tasks in your conversations
 
-Tasks an agent infers on its own do not go straight into the list. They become suggestions, and you decide.
+Tasks an agent infers on its own do not go straight into the list. They become suggestions, and you decide. A suggestion is a whole piece of work (a project or goal); its steps are the main stages, and stages that are already finished can be marked with `--done-step`.
 
 ```
-task suggest "Expense form" --due 2026-10-16 --step "Fill in" --step "Find receipts" --source "chat on 10-12" --by claude
+task suggest "Build and release taskboard" --done-step "Survey existing tools" --done-step "First version" --step "Publish on GitHub" --source "chat on 10-12" --by claude
 task suggestions              # pending suggestions
-task accept 1                 # becomes a task, with its steps
+task accept 1                 # becomes a task; --done-step steps arrive at 100%
 task dismiss 2                # dropped; the same name will not be suggested again
 ```
 

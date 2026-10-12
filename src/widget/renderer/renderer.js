@@ -315,14 +315,20 @@ function suggestionItem(suggestion, index) {
     if (next) focusKey(`sug-${next.id}-accept`);
     else document.getElementById('add-task').focus();
   };
+  const doneCount = suggestion.steps.filter((step) => step.done).length;
   const facts = [
     suggestion.due && `截止 ${suggestion.due}`,
-    suggestion.steps.length > 0 && `${suggestion.steps.length} 个步骤`,
+    suggestion.steps.length > 0 && (doneCount > 0
+      ? `${suggestion.steps.length} 个步骤，已完成 ${doneCount} 个`
+      : `${suggestion.steps.length} 个步骤`),
   ].filter(Boolean).join(' · ');
   return el('li', { class: 'suggestion' }, [
     el('div', { class: 'name', text: suggestion.name }),
     facts && el('div', { class: 'hint', text: facts }),
-    suggestion.steps.length > 0 && el('div', { class: 'hint', text: suggestion.steps.join(' → ') }),
+    suggestion.steps.length > 0 && el('ul', { class: 'suggested-steps' }, suggestion.steps.map((step) => el('li', {
+      class: step.done ? 'done' : '',
+      text: `${step.done ? '✓' : '○'} ${step.name}${step.done ? '（已完成）' : ''}`,
+    }))),
     el('div', { class: 'hint', text: suggestion.source ? `${suggestion.by} · ${suggestion.source}` : `由 ${suggestion.by} 提出` }),
     el('div', { class: 'row' }, [
       button('采纳', 'small primary', () => settle('acceptSuggestion'), `${base}-accept`),

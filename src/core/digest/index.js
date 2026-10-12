@@ -7,7 +7,9 @@ import { readClaudeConversations } from './claude.js';
 import { readDeepseekConversations } from './deepseek.js';
 import { cleanMessage } from './text.js';
 
-export const LIMITS = { messageChars: 300, messagesPerConversation: 20, totalChars: 60_000 };
+// A long conversation keeps its opening messages (where the goal is usually stated)
+// and its most recent ones; messagesPerConversation is the total kept.
+export const LIMITS = { messageChars: 300, messagesPerConversation: 20, openingMessages: 3, totalChars: 60_000 };
 
 export const AGENTS = ['claude', 'deepseek'];
 
@@ -26,13 +28,17 @@ function tidy(conversation) {
     .map((message) => ({ time: message.time, text: cleanMessage(message.text, LIMITS.messageChars) }))
     .filter((message) => message.text !== '');
   if (messages.length === 0) return null;
-  const kept = messages.slice(-LIMITS.messagesPerConversation);
+  const { messagesPerConversation: limit, openingMessages: opening } = LIMITS;
+  const omitted = Math.max(0, messages.length - limit);
+  const kept = omitted === 0 ? messages : [...messages.slice(0, opening), ...messages.slice(opening - limit)];
   return {
     agent: conversation.agent,
     project: conversation.project,
     title: conversation.title,
     lastActive: messages.at(-1).time,
-    earlierMessages: messages.length - kept.length,
+    omittedMessages: omitted,
+    // The gap sits after this many kept messages; null when nothing was left out.
+    omittedAfter: omitted === 0 ? null : opening,
     messages: kept,
   };
 }

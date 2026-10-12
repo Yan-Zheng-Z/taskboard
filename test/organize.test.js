@@ -29,7 +29,7 @@ test('readState includes pending suggestions', (t) => {
   useTempHome(t);
   update((data) => addSuggestion(data, { name: '报销', due: '2026-10-16', steps: ['填表'], source: '昨天的对话', by: 'claude' }, NOW));
   assert.deepEqual(readState().suggestions, [
-    { id: 1, name: '报销', due: '2026-10-16', steps: ['填表'], source: '昨天的对话', by: 'claude', createdAt: NOW },
+    { id: 1, name: '报销', due: '2026-10-16', steps: [{ name: '填表', done: false }], source: '昨天的对话', by: 'claude', createdAt: NOW },
   ]);
 });
 

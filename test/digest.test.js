@@ -85,14 +85,35 @@ test('whitespace is collapsed and long messages are cut with a marker', (t) => {
   assert.ok(long.text.endsWith('…'));
 });
 
-test('only the most recent messages of a long conversation are kept, with a count of the rest', (t) => {
+test('a long conversation keeps its opening messages and its most recent ones', (t) => {
   const homes = useTempAgents(t);
-  const records = Array.from({ length: LIMITS.messagesPerConversation + 5 }, (_, i) => claudeUser(`消息 ${i}`));
-  writeClaudeSession(homes.claudeHome, 'a', records, { now: NOW });
+  const total = LIMITS.messagesPerConversation + 5;
+  writeClaudeSession(homes.claudeHome, 'a', Array.from({ length: total }, (_, i) => claudeUser(`消息 ${i}`)), { now: NOW });
   const [conversation] = digest(homes).conversations;
-  assert.equal(conversation.messages.length, LIMITS.messagesPerConversation);
-  assert.equal(conversation.messages.at(-1).text, `消息 ${LIMITS.messagesPerConversation + 4}`);
-  assert.equal(conversation.earlierMessages, 5);
+  const texts = conversation.messages.map((m) => m.text);
+  assert.equal(texts.length, LIMITS.messagesPerConversation);
+  assert.deepEqual(texts.slice(0, LIMITS.openingMessages), ['消息 0', '消息 1', '消息 2']);
+  assert.equal(texts[LIMITS.openingMessages], `消息 ${LIMITS.openingMessages + 5}`);
+  assert.equal(texts.at(-1), `消息 ${total - 1}`);
+  assert.deepEqual([conversation.omittedMessages, conversation.omittedAfter], [5, LIMITS.openingMessages]);
+});
+
+test('a conversation within the limit has nothing omitted', (t) => {
+  const homes = useTempAgents(t);
+  writeClaudeSession(homes.claudeHome, 'a', [claudeUser('一'), claudeUser('二')], { now: NOW });
+  const [conversation] = digest(homes).conversations;
+  assert.deepEqual([conversation.messages.length, conversation.omittedMessages], [2, 0]);
+});
+
+test('task digest marks where messages were left out of a long conversation', (t) => {
+  useTempHome(t);
+  const homes = useTempAgents(t);
+  writeClaudeSession(homes.claudeHome, 'a', Array.from({ length: LIMITS.messagesPerConversation + 5 }, (_, i) => claudeUser(`消息 ${i}。`)));
+  const lines = task(['digest'], agentEnv(homes)).out.split('\n');
+  const marker = lines.findIndex((line) => /5 messages .*not shown/.test(line));
+  assert.ok(marker > 0, 'marker line present');
+  assert.ok(lines[marker - 1].includes('消息 2。'));
+  assert.ok(lines[marker + 1].includes(`消息 ${LIMITS.openingMessages + 5}。`));
 });
 
 test('conversations older than the range, and ones without user messages, are not included', (t) => {

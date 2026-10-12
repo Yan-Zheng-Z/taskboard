@@ -277,3 +277,13 @@ input[type="range"] {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.suggested-steps {
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.suggested-steps .done { color: var(--done); }

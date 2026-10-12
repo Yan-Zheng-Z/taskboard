@@ -32,7 +32,7 @@ View
   task show <task> [--json]                  One task with its steps
 
 Suggestions (proposed tasks that wait for the user to accept or dismiss)
-  task suggest <name> [--due <date>] [--step <name>]... [--source <text>]
+  task suggest <name> [--due <date>] [--done-step <name>]... [--step <name>]... [--source <text>]
   task suggestions [--json]                  Pending suggestions
   task accept <suggestion>                   Turn a suggestion into a task
   task dismiss <suggestion>                  Drop it; it will not be suggested again
@@ -45,7 +45,8 @@ Conversations
 
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
-  --step <name>  A step for the suggested task; repeat for several
+  --step <name>  A step of the suggested task that is still to do; repeat for several
+  --done-step <name>  A step that is already finished. Steps keep the order given
   --source <text> Where a suggestion came from, e.g. which conversation
   --by <name>    Who made the update. Defaults to $TASKBOARD_ACTOR, then "user"
   --json         Machine-readable output
@@ -108,7 +109,7 @@ function suggestionLines(suggestion) {
   const due = suggestion.due ? `due ${suggestion.due}` : 'no due date';
   const origin = suggestion.source ? `${suggestion.by}: ${suggestion.source}` : suggestion.by;
   const lines = [`#${suggestion.id}  ${due}  ${suggestion.name}  (${origin})`];
-  for (const step of suggestion.steps) lines.push(`      - ${step}`);
+  for (const step of suggestion.steps) lines.push(`      [${step.done ? 'x' : ' '}] ${step.name}`);
   return lines;
 }
 
@@ -126,8 +127,10 @@ function digestText(digest) {
   for (const conversation of digest.conversations) {
     const title = conversation.title ? ` ${conversation.title} -` : '';
     lines.push('', `## [${conversation.agent}]${title} ${conversation.project ?? 'unknown folder'} - last active ${shortTime(conversation.lastActive)}`);
-    if (conversation.earlierMessages > 0) lines.push(`(${conversation.earlierMessages} earlier messages not shown)`);
-    for (const message of conversation.messages) lines.push(`- ${shortTime(message.time)}  ${message.text}`);
+    conversation.messages.forEach((message, index) => {
+      if (index === conversation.omittedAfter) lines.push(`  (${conversation.omittedMessages} messages in between not shown)`);
+      lines.push(`- ${shortTime(message.time)}  ${message.text}`);
+    });
   }
   if (digest.omittedConversations > 0) {
     lines.push('', `(${digest.omittedConversations} older conversations left out to keep this short; use a smaller --days to focus)`);
@@ -237,9 +240,9 @@ function execute(command, args, options, env) {
       return options.json ? JSON.stringify(withProgress(task), null, 2) : showLines(task).join('\n');
     }
     case 'suggest': {
-      expectCount(args, [1], 'task suggest <name> [--due <date>] [--step <name>]... [--source <text>]');
+      expectCount(args, [1], 'task suggest <name> [--due <date>] [--done-step <name>]... [--step <name>]... [--source <text>]');
       const result = update((data) => addSuggestion(data, {
-        name: args[0], due: options.due, steps: options.step ?? [], source: options.source, by,
+        name: args[0], due: options.due, steps: options.orderedSteps, source: options.source, by,
       }, new Date().toISOString()));
       if (result.skipped) return `Skipped "${args[0].trim()}": ${SKIP_REASONS[result.skipped]}`;
       return `Saved suggestion ${result.saved.id}: ${result.saved.name}`;
@@ -274,8 +277,9 @@ function execute(command, args, options, env) {
 
 export function run(argv, { stdout, stderr, env }) {
   try {
-    const { values, positionals } = parseArgs({
+    const { values, positionals, tokens } = parseArgs({
       args: argv,
+      tokens: true,
       allowPositionals: true,
       options: {
         due: { type: 'string' },
@@ -283,6 +287,7 @@ export function run(argv, { stdout, stderr, env }) {
         'no-due': { type: 'boolean' },
         by: { type: 'string' },
         step: { type: 'string', multiple: true },
+        'done-step': { type: 'string', multiple: true },
         source: { type: 'string' },
         days: { type: 'string' },
         agent: { type: 'string' },
@@ -294,6 +299,10 @@ export function run(argv, { stdout, stderr, env }) {
       stdout(USAGE);
       return 0;
     }
+    // --step and --done-step may be mixed; the tokens keep the order they were typed in.
+    values.orderedSteps = tokens
+      .filter((token) => token.kind === 'option' && (token.name === 'step' || token.name === 'done-step'))
+      .map((token) => ({ name: token.value, done: token.name === 'done-step' }));
     const [command, ...args] = positionals;
     stdout(execute(command, args, values, env));
     return 0;

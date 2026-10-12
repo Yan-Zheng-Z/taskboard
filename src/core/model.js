@@ -153,8 +153,11 @@ const DISMISSED_LIMIT = 500;
 
 const sameName = (name) => name.trim().toLowerCase();
 
+// A suggested step is { name, done }. Earlier versions stored just the name.
+const toStep = (step) => (typeof step === 'string' ? { name: step, done: false } : { name: step?.name, done: step?.done === true });
+
 export function pendingSuggestions(data) {
-  return data.suggestions ?? [];
+  return (data.suggestions ?? []).map((suggestion) => ({ ...suggestion, steps: (suggestion.steps ?? []).map(toStep) }));
 }
 
 function findSuggestion(data, suggestionId) {
@@ -169,7 +172,7 @@ export function addSuggestion(data, { name, due, steps = [], source, by }, now) 
     id: data.nextSuggestionId ?? 1,
     name: cleanName(name, 'suggestion'),
     due: parseDue(due),
-    steps: steps.map((step) => cleanName(step, 'step')),
+    steps: steps.map(toStep).map((step) => ({ name: cleanName(step.name, 'step'), done: step.done })),
     source: typeof source === 'string' && source.trim() !== '' ? source.trim() : null,
     by: cleanAuthor(by),
     createdAt: now,
@@ -185,14 +188,18 @@ export function addSuggestion(data, { name, due, steps = [], source, by }, now) 
 
 function takeSuggestion(data, suggestionId) {
   const suggestion = findSuggestion(data, suggestionId);
-  data.suggestions = data.suggestions.filter((s) => s !== suggestion);
+  data.suggestions = data.suggestions.filter((s) => s.id !== suggestion.id);
   return suggestion;
 }
 
 export function acceptSuggestion(data, suggestionId, now) {
   const suggestion = takeSuggestion(data, suggestionId);
   const task = addTask(data, { name: suggestion.name, due: suggestion.due }, now);
-  for (const step of suggestion.steps) addStep(data, task.id, step);
+  for (const step of suggestion.steps) {
+    const created = addStep(data, task.id, step.name);
+    // Work the suggester reported as finished arrives finished, signed by them.
+    if (step.done) setStepProgress(data, task.id, created.id, 100, suggestion.by, now);
+  }
   return task;
 }
 
