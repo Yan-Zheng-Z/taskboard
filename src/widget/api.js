@@ -70,7 +70,15 @@ const reversals = new Map(Object.entries({
   },
   dismissSuggestion: (data, p) => {
     const index = (data.suggestions ?? []).findIndex((suggestion) => suggestion.id === p.suggestionId);
-    return (removed) => (current) => restoreSuggestion(current, removed, index, { forget: true });
+    const oldest = data.dismissed?.[0];
+    return (removed) => {
+      // A full list drops its oldest name to make room; undo has to bring that one back too.
+      const pushedOut = oldest !== undefined && !data.dismissed.includes(oldest);
+      return (current) => {
+        restoreSuggestion(current, removed, index, { forget: true });
+        if (pushedOut && !current.dismissed.includes(oldest)) current.dismissed = [oldest, ...current.dismissed];
+      };
+    };
   },
   acceptSuggestion: (data, p) => {
     const index = (data.suggestions ?? []).findIndex((suggestion) => suggestion.id === p.suggestionId);

@@ -168,3 +168,16 @@ test('undo reports a reason when what it would restore into is gone', (t) => {
   assert.match(result.error, /task 1 does not exist/i);
   assert.equal(readState().tasks.length, 0);
 });
+
+test('undoing a dismissal restores the remembered names exactly, even when the list was full', (t) => {
+  useTempHome(t);
+  const full = Array.from({ length: 500 }, (_, i) => `old-${i}`);
+  update((data) => {
+    data.dismissed = [...full];
+    addSuggestion(data, { name: 'one more', by: 'claude' }, NOW);
+  });
+  call('dismissSuggestion', { suggestionId: 1 });
+  assert.equal(load().dismissed.includes('old-0'), false, 'the oldest name was pushed out');
+  call('undo');
+  assert.deepEqual(load().dismissed, full);
+});

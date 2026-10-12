@@ -68,8 +68,8 @@ function showUndo(text) {
 async function act(method, payload, name) {
   const result = await api.call(method, payload);
   showNotice(result.ok ? '' : result.error);
-  // Any successful action replaces the previous chance to undo.
-  if (result.ok) showUndo(result.undoable ? `${UNDO_TEXT[method]}「${name}」` : null);
+  // Any successful action replaces the previous chance to undo; an undo that failed has used it up.
+  if (result.ok || method === 'undo') showUndo(result.undoable ? `${UNDO_TEXT[method]}「${name}」` : null);
   applyState(result.state);
   return result.ok;
 }

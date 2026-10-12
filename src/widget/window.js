@@ -15,7 +15,10 @@ const MIN_WIDTH = 280;
 const MIN_HEIGHT = 200;
 
 // Collapses the window to a strip or restores it. The strip cannot be resized vertically.
-function applyCompact(window, compact) {
+export function applyCompact(window, compact) {
+  // Save where the window is now, in the mode it is still in: a move or resize just before
+  // the switch may not have been saved yet (saving is debounced).
+  rememberWindowBounds(window.getBounds());
   setCompact(compact);
   const displays = screen.getAllDisplays().map((display) => display.workArea);
   window.setMinimumSize(MIN_WIDTH, compact ? COMPACT_HEIGHT : MIN_HEIGHT);

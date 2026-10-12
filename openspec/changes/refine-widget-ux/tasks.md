@@ -19,4 +19,4 @@
 ## 4. 收尾
 
 - [x] 4.1 更新 README 的截图和小窗口说明，验证说明与实际一致
-- [ ] 4.2 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过
+- [x] 4.2 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过
