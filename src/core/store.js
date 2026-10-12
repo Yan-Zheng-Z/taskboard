@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { emptyData, TaskError } from './model.js';
 import { validateData } from './validate.js';
+import { migrateFromV1 } from './migrate.js';
 
 export class CorruptDataError extends TaskError {}
 
@@ -39,25 +40,34 @@ function retryWhileBusy(action) {
 }
 
 
-export function load() {
+// Where the version 1 file is kept when it is first replaced by the current format.
+const legacyBackup = () => path.join(dataDir(), 'tasks.v1.backup.json');
+
+// Returns { data, legacy }: legacy is true when the file on disk is still version 1
+// and `data` is its converted form, not yet saved.
+function read() {
   const file = dataFile();
   let text;
   try {
     text = retryWhileBusy(() => fs.readFileSync(file, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') return emptyData();
+    if (error.code === 'ENOENT') return { data: emptyData(), legacy: false };
     throw error;
   }
   try {
     // Some Windows editors and PowerShell save UTF-8 with a byte order mark.
     const data = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
     validateData(data);
-    return data;
+    return data.version === 1 ? { data: migrateFromV1(data), legacy: true } : { data, legacy: false };
   } catch (error) {
     throw new CorruptDataError(
       `data file is not valid and was left untouched: ${file} (${error.message}). Fix or move the file to continue.`,
     );
   }
+}
+
+export function load() {
+  return read().data;
 }
 
 // Removes a lock that was seen as stale, but only if it is still that same lock.
@@ -115,10 +125,12 @@ export function update(fn, { timeoutMs = LOCK_TIMEOUT_MS } = {}) {
   fs.mkdirSync(dataDir(), { recursive: true });
   acquireLock(lockFile, timeoutMs);
   try {
-    const data = load();
+    const { data, legacy } = read();
     const result = fn(data);
     const tempFile = `${file}.tmp-${process.pid}`;
     try {
+      // The first save in the new format: keep the old file, once.
+      if (legacy && !fs.existsSync(legacyBackup())) fs.copyFileSync(file, legacyBackup());
       fs.writeFileSync(tempFile, `${JSON.stringify(data, null, 2)}\n`);
       retryWhileBusy(() => fs.renameSync(tempFile, file));
     } catch (error) {

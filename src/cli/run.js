@@ -4,36 +4,37 @@
 import { parseArgs } from 'node:util';
 import {
   TaskError, addTask, editTask, removeTask, addStep, renameStep, removeStep,
-  setStepProgress, setTaskProgress, taskProgress, findTask,
+  setStepDone, taskProgress, findTask,
   addSuggestion, pendingSuggestions, acceptSuggestion, dismissSuggestion,
 } from '../core/model.js';
 import { load, update } from '../core/store.js';
-import { describeTask } from '../core/view.js';
+import { describeTask, activeTasks, allArchived } from '../core/view.js';
 import { buildDigest, agentHomes, AGENTS } from '../core/digest/index.js';
 
 const USAGE = `Usage: task <command> [arguments] [options]
 
-Tasks
-  task add <name> [--due <date>]             Create a task, print its id
+Tasks (every task has at least one step)
+  task add <name> --step <name>... [--due <date>]
+                                             Create a task with its steps, print its id
   task edit <task> [--name <name>] [--due <date> | --no-due]
-  task rm <task>                             Delete a task
+  task rm <task>                             Delete a task that was cancelled or added by mistake
 
 Steps
   task step add <task> <name>                Add a step, print its id
   task step rename <task> <step> <name>
-  task step rm <task> <step>
+  task step rm <task> <step>                 Not allowed for a task's last step
 
-Progress
-  task progress <task> <step> <percent>      Set a step to 0-100
-  task progress <task> <percent>             Set a task that has no steps
-  task done <task> [<step>]                  Same as progress ... 100
+Progress (a step is either done or not)
+  task done <task> <step>                    Mark a step finished
+  task reopen <task> <step>                  Mark it not finished again
+                                             A task whose steps are all done is archived by itself.
 
 View
-  task list [--json]                         All tasks with due date and progress
+  task list [--archived | --all] [--json]    Open tasks; --archived: finished ones; --all: both
   task show <task> [--json]                  One task with its steps
 
 Suggestions (proposed tasks that wait for the user to accept or dismiss)
-  task suggest <name> [--due <date>] [--done-step <name>]... [--step <name>]... [--source <text>]
+  task suggest <name> [--done-step <name>]... [--step <name>]... [--due <date>] [--source <text>]
   task suggestions [--json]                  Pending suggestions
   task accept <suggestion>                   Turn a suggestion into a task
   task dismiss <suggestion>                  Drop it; it will not be suggested again
@@ -46,8 +47,8 @@ Conversations
 
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
-  --step <name>  A step of the suggested task that is still to do; repeat for several
-  --done-step <name>  A step that is already finished. Steps keep the order given
+  --step <name>  A step that is still to do; repeat for several. Steps keep the order given
+  --done-step <name>  In a suggestion: a step that is already finished
   --source <text> Where a suggestion came from, e.g. which conversation
   --by <name>    Who made the update. Defaults to $TASKBOARD_ACTOR, then "user"
   --json         Machine-readable output
@@ -66,20 +67,12 @@ function plainMessage(error, argv) {
   return `unknown option "${option}". Run task --help to see the options`;
 }
 
-const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest'];
+const COMMANDS = ['add', 'edit', 'rm', 'step', 'done', 'reopen', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest'];
 
 function toId(value, what) {
   // Fifteen digits is far beyond any real id and still exact as a number.
   if (value === undefined || !/^\d{1,15}$/.test(value)) {
     throw new TaskError(`${what} id must be a number, got "${value ?? ''}"`);
-  }
-  return Number(value);
-}
-
-// Quotes back what was typed, so "50%" is not reported as NaN.
-function toPercent(value) {
-  if (!/^\d{1,3}$/.test(value ?? '') || Number(value) > 100) {
-    throw new TaskError(`progress must be a whole number from 0 to 100, got "${value ?? ''}"`);
   }
   return Number(value);
 }
@@ -97,8 +90,7 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 function urgency(task) {
   const { state, days } = describeTask(task, Date.now());
-  if (state === 'done') return '[done]  ';
-  if (state === 'none') return '';
+  if (state === 'done' || state === 'none') return '';
   if (state === 'overdue') return days < 0 ? `[overdue by ${plural(-days, 'day')}]  ` : '[overdue]  ';
   return days === 0 ? '[due today]  ' : `[${plural(days, 'day')} left]  `;
 }
@@ -114,16 +106,21 @@ function updatedNote(item) {
 }
 
 function listLine(task) {
+  if (task.completedAt) return `#${task.id}  done ${localTime(task.completedAt).slice(0, 10)}  ${task.name}`;
   const due = task.due ? `due ${task.due}` : 'no due date';
   return `#${task.id}  ${String(taskProgress(task)).padStart(3)}%  ${due}  ${urgency(task)}${task.name}`;
 }
 
 function showLines(task) {
-  const lines = [`#${task.id}  ${task.name}`, `Due: ${task.due ?? 'none'}`];
-  lines.push(`Progress: ${taskProgress(task)}%${task.steps.length === 0 ? updatedNote(task) : ''}`);
-  if (task.steps.length === 0) lines.push('No steps.');
+  const finished = task.steps.filter((step) => step.done).length;
+  const lines = [
+    `#${task.id}  ${task.name}`,
+    `Due: ${task.due ?? 'none'}`,
+    `Progress: ${taskProgress(task)}% (${finished} of ${plural(task.steps.length, 'step')} done)`,
+  ];
+  if (task.completedAt) lines.push(`Completed: ${localTime(task.completedAt)} (archived)`);
   for (const step of task.steps) {
-    lines.push(`  ${step.id}. [${String(step.percent).padStart(3)}%] ${step.name}${updatedNote(step)}`);
+    lines.push(`  ${step.id}. [${step.done ? 'x' : ' '}] ${step.name}${updatedNote(step)}`);
   }
   return lines;
 }
@@ -184,17 +181,23 @@ function digestCommand(options, env) {
   return options.json ? JSON.stringify(digest, null, 2) : digestText(digest);
 }
 
-function setProgress(args, percent, by) {
-  const now = new Date().toISOString();
+// done: true marks the step finished, false reopens it.
+function setDone(command, args, done, by) {
+  expectCount(args, [2], `task ${command} <task> <step>  (a step number is required)`);
   const taskId = toId(args[0], 'task');
-  if (args.length === 1) {
-    const task = update((data) => setTaskProgress(data, taskId, percent, by, now));
-    return `Task ${taskId} set to ${percent}%: ${task.name}`;
-  }
   const stepId = toId(args[1], 'step');
+  const now = new Date().toISOString();
+  const { step, wasArchived, isArchived } = update((data) => {
+    const task = findTask(data, taskId);
+    const before = Boolean(task.completedAt);
+    const changed = setStepDone(data, taskId, stepId, done, by, now);
+    return { step: changed, wasArchived: before, isArchived: Boolean(task.completedAt) };
+  });
   // The name lets the caller see that this was the step they meant.
-  const step = update((data) => setStepProgress(data, taskId, stepId, percent, by, now));
-  return `Task ${taskId} step ${stepId} set to ${percent}%: ${step.name}`;
+  let message = `Task ${taskId} step ${stepId} ${done ? 'done' : 'reopened'}: ${step.name}`;
+  if (isArchived && !wasArchived) message += `\nTask ${taskId} is complete and archived.`;
+  if (wasArchived && !isArchived) message += `\nTask ${taskId} is open again.`;
+  return message;
 }
 
 function stepCommand(args) {
@@ -214,20 +217,46 @@ function stepCommand(args) {
   if (action === 'rm') {
     expectCount(rest, [2], 'task step rm <task> <step>');
     const [taskId, stepId] = [toId(rest[0], 'task'), toId(rest[1], 'step')];
-    update((data) => removeStep(data, taskId, stepId));
+    update((data) => removeStep(data, taskId, stepId, new Date().toISOString()));
     return `Removed step ${stepId} from task ${taskId}`;
   }
   throw new TaskError(`unknown step command "${action ?? ''}". Available: add, rename, rm`);
 }
 
+function listCommand(options) {
+  if (options.archived && options.all) throw new TaskError('--archived and --all cannot be used together');
+  const { tasks } = load();
+  const open = activeTasks(tasks);
+  const archived = allArchived(tasks);
+  let chosen = open;
+  if (options.archived) chosen = archived;
+  else if (options.all) chosen = [...open, ...archived];
+  if (options.json) return JSON.stringify({ tasks: chosen.map(withProgress) }, null, 2);
+  if (chosen.length === 0) {
+    return options.archived
+      ? 'No archived tasks.'
+      : 'No open tasks. Add one with: task add "name" --step "first step" --due YYYY-MM-DD';
+  }
+  return chosen.map(listLine).join('\n');
+}
+
 function execute(command, args, options, env) {
-  // An empty TASKBOARD_ACTOR counts as unset; an explicitly empty --by is an error.
+  // An empty or blank TASKBOARD_ACTOR counts as unset; an explicitly empty --by is an error.
   const by = options.by ?? (env.TASKBOARD_ACTOR?.trim() || 'user');
+  const steps = options.orderedSteps;
   switch (command) {
     case 'add': {
-      expectCount(args, [1], 'task add <name> [--due <date>]');
-      const task = update((data) => addTask(data, { name: args[0], due: options.due }, new Date().toISOString()));
-      return `Added task ${task.id}: ${task.name}`;
+      expectCount(args, [1], 'task add <name> --step <name>... [--due <date>]');
+      if (steps.some((step) => step.done)) {
+        throw new TaskError('--done-step is only for suggestions; add the task, then use task done');
+      }
+      if (steps.length === 0) {
+        throw new TaskError('a task needs at least one step: add --step "name" (repeat for more)');
+      }
+      const task = update((data) => addTask(data, {
+        name: args[0], due: options.due, steps: steps.map((step) => step.name),
+      }, new Date().toISOString()));
+      return `Added task ${task.id}: ${task.name} (${plural(task.steps.length, 'step')})`;
     }
     case 'edit': {
       expectCount(args, [1], 'task edit <task> [--name <name>] [--due <date> | --no-due]');
@@ -253,20 +282,16 @@ function execute(command, args, options, env) {
     }
     case 'step':
       return stepCommand(args);
-    case 'progress': {
-      expectCount(args, [2, 3], 'task progress <task> [<step>] <percent>');
-      return setProgress(args.slice(0, -1), toPercent(args.at(-1)), by);
-    }
-    case 'done': {
-      expectCount(args, [1, 2], 'task done <task> [<step>]');
-      return setProgress(args, 100, by);
-    }
+    case 'done':
+      return setDone('done', args, true, by);
+    case 'reopen':
+      return setDone('reopen', args, false, by);
+    case 'progress':
+      throw new TaskError('task progress was removed: a step is either done or not. '
+        + 'Use: task done <task> <step>   or   task reopen <task> <step>');
     case 'list': {
-      expectCount(args, [0], 'task list [--json]');
-      const { tasks } = load();
-      if (options.json) return JSON.stringify({ tasks: tasks.map(withProgress) }, null, 2);
-      if (tasks.length === 0) return 'No tasks yet. Add one with: task add "name" --due YYYY-MM-DD';
-      return tasks.map(listLine).join('\n');
+      expectCount(args, [0], 'task list [--archived | --all] [--json]');
+      return listCommand(options);
     }
     case 'show': {
       expectCount(args, [1], 'task show <task> [--json]');
@@ -274,9 +299,12 @@ function execute(command, args, options, env) {
       return options.json ? JSON.stringify(withProgress(task), null, 2) : showLines(task).join('\n');
     }
     case 'suggest': {
-      expectCount(args, [1], 'task suggest <name> [--due <date>] [--done-step <name>]... [--step <name>]... [--source <text>]');
+      expectCount(args, [1], 'task suggest <name> [--done-step <name>]... [--step <name>]... [--due <date>] [--source <text>]');
+      if (steps.length === 0) {
+        throw new TaskError('a suggestion needs at least one step: add --step "name" or --done-step "name"');
+      }
       const result = update((data) => addSuggestion(data, {
-        name: args[0], due: options.due, steps: options.orderedSteps, source: options.source, by,
+        name: args[0], due: options.due, steps, source: options.source, by,
       }, new Date().toISOString()));
       if (result.skipped) return `Skipped "${args[0].trim()}": ${SKIP_REASONS[result.skipped]}`;
       return `Saved suggestion ${result.saved.id}: ${result.saved.name}`;
@@ -325,6 +353,8 @@ export function run(argv, { stdout, stderr, env }) {
         source: { type: 'string' },
         days: { type: 'string' },
         agent: { type: 'string' },
+        archived: { type: 'boolean' },
+        all: { type: 'boolean' },
         json: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },

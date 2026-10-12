@@ -58,7 +58,7 @@ export function claudeLaunch(claudePath) {
   return { command: claudePath, args: ['-p', ORGANIZE_PROMPT, '--allowedTools', 'Bash(task:*)'] };
 }
 
-// What a run can change: how many suggestions wait, and each task's step progress.
+// What a run can change: how many suggestions wait, and which steps of each task are done.
 function snapshot() {
   try {
     const data = load();
@@ -66,7 +66,7 @@ function snapshot() {
       suggestions: pendingSuggestions(data).length,
       tasks: new Map(data.tasks.map((task) => [task.id, {
         name: task.name,
-        steps: new Map(task.steps.map((step) => [step.id, step.percent])),
+        steps: new Map(task.steps.map((step) => [step.id, step.done])),
       }])),
     };
   } catch {
@@ -82,9 +82,9 @@ function changesBetween(before, after) {
     if (!was) continue;
     let advancedSteps = 0;
     let addedSteps = 0;
-    for (const [stepId, percent] of now.steps) {
+    for (const [stepId, done] of now.steps) {
       if (!was.steps.has(stepId)) addedSteps += 1;
-      else if (percent > was.steps.get(stepId)) advancedSteps += 1;
+      else if (done && !was.steps.get(stepId)) advancedSteps += 1;
     }
     if (advancedSteps + addedSteps > 0) updated.push({ id, name: now.name, advancedSteps, addedSteps });
   }

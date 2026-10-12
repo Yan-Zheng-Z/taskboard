@@ -1,9 +1,11 @@
-// Derived, read-only facts about tasks for display: urgency and ordering.
+// Derived, read-only facts about tasks for display: urgency, ordering and the recent archive.
 
 import { taskProgress } from './model.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SOON_DAYS = 3;
+// Finished tasks stay visible in the archive this long; after that they are only kept in the file.
+export const ARCHIVE_DAYS = 7;
 
 function dueParts(due) {
   const [date, time] = due.split(' ');
@@ -27,29 +29,38 @@ function daysUntil(due, now) {
   return Math.round((Date.UTC(year, month - 1, day) - from) / DAY_MS);
 }
 
+export const isArchived = (task) => Boolean(task.completedAt);
+
 // state: 'done' | 'none' | 'overdue' | 'soon' | 'normal'
 export function describeTask(task, now) {
-  const progress = taskProgress(task);
   const days = task.due ? daysUntil(task.due, now) : null;
   let state;
-  if (progress === 100) state = 'done';
+  if (isArchived(task)) state = 'done';
   else if (!task.due) state = 'none';
   else if (now > dueTime(task.due)) state = 'overdue';
   else if (days <= SOON_DAYS) state = 'soon';
   else state = 'normal';
-  return { progress, state, days };
+  return { progress: taskProgress(task), state, days };
 }
 
-// Unfinished tasks by nearest due date, then unfinished without a due date, then finished.
-export function sortTasks(tasks, now) {
-  const rank = (task) => {
-    if (describeTask(task, now).state === 'done') return 2;
-    return task.due ? 0 : 1;
-  };
-  return [...tasks].sort((a, b) => {
-    const byRank = rank(a) - rank(b);
-    if (byRank !== 0) return byRank;
-    if (rank(a) === 0) return dueTime(a.due) - dueTime(b.due) || a.id - b.id;
+// Unfinished tasks by nearest due date, then those without a due date.
+export function activeTasks(tasks) {
+  return tasks.filter((task) => !isArchived(task)).sort((a, b) => {
+    if (a.due && b.due) return dueTime(a.due) - dueTime(b.due) || a.id - b.id;
+    if (a.due || b.due) return a.due ? -1 : 1;
     return a.id - b.id;
   });
+}
+
+// Tasks finished within the last ARCHIVE_DAYS days, most recently finished first.
+export function recentArchive(tasks, now) {
+  const since = now - ARCHIVE_DAYS * DAY_MS;
+  return tasks
+    .filter((task) => isArchived(task) && Date.parse(task.completedAt) >= since)
+    .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt) || b.id - a.id);
+}
+
+// Every finished task, most recently finished first.
+export function allArchived(tasks) {
+  return tasks.filter(isArchived).sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt) || b.id - a.id);
 }

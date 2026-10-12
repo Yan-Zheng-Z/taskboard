@@ -34,16 +34,16 @@ test('load does not create the data file', (t) => {
 
 test('changes made in update are still there after reloading', (t) => {
   useTempHome(t);
-  const created = update((data) => addTask(data, { name: '写论文', due: '2026-10-20' }, NOW));
+  const created = update((data) => addTask(data, { name: '写论文', due: '2026-10-20', steps: ['s'] }, NOW));
   assert.equal(created.id, 1);
   assert.deepEqual(load().tasks.map((task) => [task.id, task.name, task.due]), [[1, '写论文', '2026-10-20']]);
 });
 
 test('update saves nothing when the callback throws', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'kept' }, NOW));
+  update((data) => addTask(data, { name: 'kept', steps: ['s'] }, NOW));
   assert.throws(() => update((data) => {
-    addTask(data, { name: 'discarded' }, NOW);
+    addTask(data, { name: 'discarded', steps: ['s'] }, NOW);
     throw new TaskError('boom');
   }), /boom/);
   assert.deepEqual(load().tasks.map((task) => task.name), ['kept']);
@@ -51,46 +51,46 @@ test('update saves nothing when the callback throws', (t) => {
 
 test('update leaves no lock or temp files behind', (t) => {
   const dir = useTempHome(t);
-  update((data) => addTask(data, { name: 'a' }, NOW));
+  update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW));
   assert.deepEqual(fs.readdirSync(dir), ['tasks.json']);
 });
 
 test('concurrent updates from several processes are all kept', async (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'shared' }, NOW));
+  update((data) => addTask(data, { name: 'shared', steps: ['s'] }, NOW));
   const names = Array.from({ length: 8 }, (_, i) => `writer-${i}`);
   const codes = await Promise.all(names.map((name) => new Promise((resolve) => {
     spawn(process.execPath, [worker, name], { env: process.env, stdio: 'inherit' }).on('exit', resolve);
   })));
   assert.deepEqual(codes, names.map(() => 0));
   const [task] = load().tasks;
-  assert.deepEqual(task.steps.map((step) => step.name).sort(), names);
-  assert.ok(task.steps.every((step) => step.percent === 100));
-  assert.equal(new Set(task.steps.map((step) => step.id)).size, names.length);
+  assert.deepEqual(task.steps.map((step) => step.name).filter((name) => name !== 's').sort(), names);
+  assert.ok(task.steps.filter((step) => step.name !== 's').every((step) => step.done));
+  assert.equal(new Set(task.steps.map((step) => step.id)).size, names.length + 1);
 });
 
 test('update fails with a clear error while another process holds the lock', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'a' }, NOW));
+  update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW));
   fs.writeFileSync(`${dataFile()}.lock`, 'held');
-  assert.throws(() => update((data) => addTask(data, { name: 'b' }, NOW), { timeoutMs: 200 }), /locked/i);
+  assert.throws(() => update((data) => addTask(data, { name: 'b', steps: ['s'] }, NOW), { timeoutMs: 200 }), /locked/i);
   assert.equal(load().tasks.length, 1);
 });
 
 test('a stale lock left by a crashed process is taken over', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'a' }, NOW));
+  update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW));
   const lock = `${dataFile()}.lock`;
   fs.writeFileSync(lock, 'dead');
   const old = new Date(Date.now() - 60_000);
   fs.utimesSync(lock, old, old);
-  update((data) => addTask(data, { name: 'b' }, NOW), { timeoutMs: 200 });
+  update((data) => addTask(data, { name: 'b', steps: ['s'] }, NOW), { timeoutMs: 200 });
   assert.equal(load().tasks.length, 2);
 });
 
 test('a leftover temp file from an interrupted write does not affect the data', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'a' }, NOW));
+  update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW));
   fs.writeFileSync(`${dataFile()}.tmp-999`, '{"version":1,"tasks":[{"na');
   assert.deepEqual(load().tasks.map((task) => task.name), ['a']);
 });
@@ -115,7 +115,7 @@ test('update refuses to write over a corrupt file and leaves it untouched', (t) 
   const dir = useTempHome(t);
   fs.mkdirSync(dataDir(), { recursive: true });
   fs.writeFileSync(dataFile(), '{not json');
-  assert.throws(() => update((data) => addTask(data, { name: 'a' }, NOW)), CorruptDataError);
+  assert.throws(() => update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW)), CorruptDataError);
   assert.equal(fs.readFileSync(dataFile(), 'utf8'), '{not json');
   assert.deepEqual(fs.readdirSync(dir), ['tasks.json']);
 });
@@ -129,7 +129,7 @@ test('update gives up with a clear error when the lock file cannot be created at
     throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
   });
   assert.throws(
-    () => update((data) => addTask(data, { name: 'a' }, NOW), { timeoutMs: 150 }),
+    () => update((data) => addTask(data, { name: 'a', steps: ['s'] }, NOW), { timeoutMs: 150 }),
     (error) => error instanceof TaskError && error.message.includes(dir) && /operation not permitted/.test(error.message),
   );
 });

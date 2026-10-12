@@ -282,7 +282,7 @@ test('task digest changes neither the conversation records nor the task data', (
     writeClaudeSession(homes.claudeHome, 'a', [claudeUser('一条消息')], { daysAgo: 1 }),
     writeDshSession(homes.dshHome, 'b', [dshSession(), dshUser('另一条', Date.now())], { daysAgo: 2 }),
   ];
-  task(['add', 'existing'], agentEnv(homes));
+  task(['add', 'existing', '--step', 's'], agentEnv(homes));
   files.push(dataFile());
   const snapshot = () => files.map((file) => [fs.readFileSync(file).toString('base64'), fs.statSync(file).mtimeMs]);
   const before = snapshot();

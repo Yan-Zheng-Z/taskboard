@@ -11,6 +11,7 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const isId = (value) => Number.isInteger(value) && value > 0;
 const isPercent = (value) => Number.isInteger(value) && value >= 0 && value <= 100;
 const isName = (value) => typeof value === 'string' && value.trim() !== '';
+const isTime = (value) => typeof value === 'string' && !Number.isNaN(Date.parse(value));
 
 // Ids must be positive, unique, and below the counter that hands out the next one.
 function checkIds(items, nextId, what, counterName) {
@@ -41,16 +42,39 @@ function checkDue(due, what) {
   if (!real) fail(`${what}: due date "${due}" is not valid`);
 }
 
-function checkTask(task) {
+// What tasks have in common in every version: a name, a due date and a list of identified, named steps.
+function checkTaskBasics(task) {
   const what = `task ${task.id}`;
   if (!isName(task.name)) fail(`${what}: name must be non-empty text`);
-  if (!isPercent(task.percent)) fail(`${what}: percent must be a whole number from 0 to 100`);
   checkDue(task.due, what);
   if (!Array.isArray(task.steps)) fail(`${what}: steps must be a list`);
   checkIds(task.steps, task.nextStepId, `${what} step`, `${what}: nextStepId`);
   for (const step of task.steps) {
     if (!isName(step.name)) fail(`${what} step ${step.id}: name must be non-empty text`);
+  }
+  return what;
+}
+
+// Version 1: steps, and tasks without steps, carry a percentage.
+function checkTaskV1(task) {
+  const what = checkTaskBasics(task);
+  if (!isPercent(task.percent)) fail(`${what}: percent must be a whole number from 0 to 100`);
+  for (const step of task.steps) {
     if (!isPercent(step.percent)) fail(`${what} step ${step.id}: percent must be a whole number from 0 to 100`);
+  }
+}
+
+// Version 2: every task has steps, each done or not; a finished task records when.
+function checkTaskV2(task) {
+  const what = checkTaskBasics(task);
+  if (task.steps.length === 0) fail(`${what}: a task needs at least one step`);
+  for (const step of task.steps) {
+    if (typeof step.done !== 'boolean') fail(`${what} step ${step.id}: done must be true or false`);
+  }
+  const complete = task.steps.every((step) => step.done);
+  if (complete && !isTime(task.completedAt)) fail(`${what}: completedAt must be a time when every step is done`);
+  if (!complete && task.completedAt !== null && task.completedAt !== undefined) {
+    fail(`${what}: completedAt must be empty while a step is not done`);
   }
 }
 
@@ -64,9 +88,13 @@ function checkSuggestion(suggestion) {
   }
 }
 
+const TASK_CHECKS = { 1: checkTaskV1, 2: checkTaskV2 };
+
+// Accepts the current version and version 1 (which the store then converts).
 export function validateData(data) {
   if (!isObject(data)) fail('the file must contain one object');
-  if (data.version !== 1) fail(`unsupported version "${data.version}"`);
+  const checkTask = TASK_CHECKS[data.version];
+  if (!checkTask) fail(`unsupported version "${data.version}"`);
   if (!Number.isInteger(data.nextTaskId)) fail('nextTaskId must be a whole number');
   if (!Array.isArray(data.tasks)) fail('tasks must be a list');
   checkIds(data.tasks, data.nextTaskId, 'task', 'nextTaskId');

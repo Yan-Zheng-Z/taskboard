@@ -1,10 +1,15 @@
 // Pure data model: every function takes the data object and mutates it in place.
 // Nothing here touches the file system.
+//
+// A task is a list of steps, each either done or not. Task progress is the share of
+// finished steps. A task whose steps are all done is archived: it has a completedAt time.
 
 export class TaskError extends Error {}
 
+export const DATA_VERSION = 2;
+
 export function emptyData() {
-  return { version: 1, nextTaskId: 1, tasks: [] };
+  return { version: DATA_VERSION, nextTaskId: 1, tasks: [] };
 }
 
 export const NAME_LIMIT = 200;
@@ -27,6 +32,17 @@ function cleanName(name, what) {
   return singleLine(name, `${what} name`, NAME_LIMIT);
 }
 
+function cleanAuthor(by) {
+  return singleLine(by, 'author (--by)', AUTHOR_LIMIT);
+}
+
+function cleanStepNames(steps, what) {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    throw new TaskError(`${what} needs at least one step`);
+  }
+  return steps.map((step) => cleanName(step, 'step'));
+}
+
 const DUE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
 
 // Accepts "YYYY-MM-DD" or "YYYY-MM-DD HH:mm" (local time). Returns the normalized string or null.
@@ -45,16 +61,6 @@ export function parseDue(due) {
   throw new TaskError(`invalid due date "${due}": use YYYY-MM-DD or "YYYY-MM-DD HH:mm" (24-hour, two digits each)`);
 }
 
-function checkPercent(percent) {
-  if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
-    throw new TaskError(`progress must be an integer from 0 to 100, got "${percent}"`);
-  }
-}
-
-function cleanAuthor(by) {
-  return singleLine(by, 'author (--by)', AUTHOR_LIMIT);
-}
-
 export function findTask(data, taskId) {
   const task = data.tasks.find((t) => t.id === taskId);
   if (!task) throw new TaskError(`task ${taskId} does not exist`);
@@ -67,17 +73,26 @@ export function findStep(data, taskId, stepId) {
   return step;
 }
 
-export function addTask(data, { name, due }, now) {
+const newStep = (id, name) => ({ id, name, done: false, updatedBy: null, updatedAt: null });
+
+// Archives the task when every step is done, and un-archives it when one is not.
+// The completion time is kept if the task was already archived.
+function refreshCompletion(task, now) {
+  const complete = task.steps.every((step) => step.done);
+  if (!complete) task.completedAt = null;
+  else if (!task.completedAt) task.completedAt = now;
+}
+
+export function addTask(data, { name, due, steps }, now) {
+  const stepNames = cleanStepNames(steps, 'a task');
   const task = {
     id: data.nextTaskId,
     name: cleanName(name, 'task'),
     due: parseDue(due),
     createdAt: now,
-    percent: 0,
-    updatedBy: null,
-    updatedAt: null,
-    nextStepId: 1,
-    steps: [],
+    completedAt: null,
+    nextStepId: stepNames.length + 1,
+    steps: stepNames.map((stepName, index) => newStep(index + 1, stepName)),
   };
   data.nextTaskId += 1;
   data.tasks.push(task);
@@ -100,17 +115,13 @@ export function removeTask(data, taskId) {
   return task;
 }
 
+// A new step is unfinished, so adding one to an archived task brings the task back.
 export function addStep(data, taskId, name) {
   const task = findTask(data, taskId);
-  const step = {
-    id: task.nextStepId,
-    name: cleanName(name, 'step'),
-    percent: 0,
-    updatedBy: null,
-    updatedAt: null,
-  };
+  const step = newStep(task.nextStepId, cleanName(name, 'step'));
   task.nextStepId += 1;
   task.steps.push(step);
+  task.completedAt = null;
   return step;
 }
 
@@ -120,41 +131,33 @@ export function renameStep(data, taskId, stepId, name) {
   return step;
 }
 
-export function removeStep(data, taskId, stepId) {
+export function removeStep(data, taskId, stepId, now) {
   const task = findTask(data, taskId);
   const step = findStep(data, taskId, stepId);
+  if (task.steps.length === 1) {
+    throw new TaskError(`a task needs at least one step; to cancel task ${taskId}, remove the task itself`);
+  }
   task.steps.splice(task.steps.indexOf(step), 1);
+  refreshCompletion(task, now);
   return step;
 }
 
-export function setStepProgress(data, taskId, stepId, percent, by, now) {
+// Marks a step finished (done: true) or reopens it (done: false).
+export function setStepDone(data, taskId, stepId, done, by, now) {
+  const task = findTask(data, taskId);
   const step = findStep(data, taskId, stepId);
-  checkPercent(percent);
+  if (typeof done !== 'boolean') throw new TaskError('a step is either done or not done');
   const author = cleanAuthor(by);
-  step.percent = percent;
+  step.done = done;
   step.updatedBy = author;
   step.updatedAt = now;
+  refreshCompletion(task, now);
   return step;
-}
-
-// Task-level progress only exists for tasks without steps.
-export function setTaskProgress(data, taskId, percent, by, now) {
-  const task = findTask(data, taskId);
-  if (task.steps.length > 0) {
-    throw new TaskError(`task ${taskId} has steps; update a step instead`);
-  }
-  checkPercent(percent);
-  const author = cleanAuthor(by);
-  task.percent = percent;
-  task.updatedBy = author;
-  task.updatedAt = now;
-  return task;
 }
 
 export function taskProgress(task) {
-  if (task.steps.length === 0) return task.percent;
-  const sum = task.steps.reduce((total, step) => total + step.percent, 0);
-  return Math.round(sum / task.steps.length);
+  const finished = task.steps.filter((step) => step.done).length;
+  return Math.round((finished / task.steps.length) * 100);
 }
 
 // ---- suggestions ----
@@ -179,7 +182,8 @@ function findSuggestion(data, suggestionId) {
 }
 
 // Returns { saved } or { skipped: 'task' | 'pending' | 'dismissed' } when the name is already known.
-export function addSuggestion(data, { name, due, steps = [], source, by }, now) {
+export function addSuggestion(data, { name, due, steps, source, by }, now) {
+  if (!Array.isArray(steps) || steps.length === 0) throw new TaskError('a suggestion needs at least one step');
   const suggestion = {
     id: data.nextSuggestionId ?? 1,
     name: cleanName(name, 'suggestion'),
@@ -206,12 +210,13 @@ function takeSuggestion(data, suggestionId) {
 
 export function acceptSuggestion(data, suggestionId, now) {
   const suggestion = takeSuggestion(data, suggestionId);
-  const task = addTask(data, { name: suggestion.name, due: suggestion.due }, now);
-  for (const step of suggestion.steps) {
-    const created = addStep(data, task.id, step.name);
+  // Suggestions saved before steps were required may have none: the task then is its own single step.
+  const steps = suggestion.steps.length > 0 ? suggestion.steps : [{ name: suggestion.name, done: false }];
+  const task = addTask(data, { name: suggestion.name, due: suggestion.due, steps: steps.map((step) => step.name) }, now);
+  steps.forEach((step, index) => {
     // Work the suggester reported as finished arrives finished, signed by them.
-    if (step.done) setStepProgress(data, task.id, created.id, 100, suggestion.by, now);
-  }
+    if (step.done) setStepDone(data, task.id, index + 1, true, suggestion.by, now);
+  });
   return task;
 }
 
@@ -232,12 +237,22 @@ export function restoreTask(data, task, index) {
   return task;
 }
 
-export function restoreStep(data, taskId, step, index) {
+export function restoreStep(data, taskId, step, index, now) {
   const task = findTask(data, taskId);
   if (task.steps.some((existing) => existing.id === step.id)) {
     throw new TaskError(`step ${step.id} already exists in task ${taskId}`);
   }
   task.steps.splice(Math.min(index, task.steps.length), 0, step);
+  refreshCompletion(task, now);
+  return step;
+}
+
+// Puts a step back to an earlier state without signing it again: for undoing the tick that archived a task.
+export function restoreStepState(data, taskId, stepId, { done, updatedBy, updatedAt }, now) {
+  const task = findTask(data, taskId);
+  const step = findStep(data, taskId, stepId);
+  Object.assign(step, { done, updatedBy, updatedAt });
+  refreshCompletion(task, now);
   return step;
 }
 

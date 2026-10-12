@@ -8,7 +8,7 @@ import { findClaude, claudeLaunch, createOrganizer, ORGANIZE_PROMPT } from '../s
 import { loadWidgetState, markOrganizeOffered, saveBounds, loadBounds } from '../src/widget/window-state.js';
 import { readState, call } from '../src/widget/api.js';
 import { update } from '../src/core/store.js';
-import { addTask, addStep, addSuggestion, pendingSuggestions } from '../src/core/model.js';
+import { addTask, addSuggestion, pendingSuggestions } from '../src/core/model.js';
 import { load } from '../src/core/store.js';
 import { useTempHome } from './helpers/tmp-home.js';
 
@@ -42,7 +42,7 @@ test('the widget can accept and dismiss suggestions', (t) => {
   useTempHome(t);
   update((data) => {
     addSuggestion(data, { name: '要做的', steps: ['一', '二'], by: 'claude' }, NOW);
-    addSuggestion(data, { name: '不要的', by: 'claude' }, NOW);
+    addSuggestion(data, { name: '不要的', steps: ['s'], by: 'claude' }, NOW);
   });
   const accepted = call('acceptSuggestion', { suggestionId: 1 });
   assert.equal(accepted.ok, true);
@@ -78,9 +78,9 @@ test('the card is offered only when never offered and there are no tasks or sugg
   useTempHome(t);
   const { instance } = organizer(fakeLaunch('none'));
   assert.equal(instance.view(readState()).offer, true);
-  update((data) => addSuggestion(data, { name: 's', by: 'claude' }, NOW));
+  update((data) => addSuggestion(data, { name: 's', steps: ['x'], by: 'claude' }, NOW));
   assert.equal(instance.view(readState()).offer, false);
-  update((data) => { data.suggestions = []; addTask(data, { name: 'a task' }, NOW); });
+  update((data) => { data.suggestions = []; addTask(data, { name: 'a task', steps: ['s'] }, NOW); });
   assert.equal(instance.view(readState()).offer, false);
 });
 
@@ -129,7 +129,7 @@ test('a run that finds nothing reports zero', async (t) => {
 
 test('a failing run reports a reason and leaves the data alone', async (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'kept' }, NOW));
+  update((data) => addTask(data, { name: 'kept', steps: ['s'] }, NOW));
   const { instance } = organizer(fakeLaunch('fail'));
   await instance.start();
   const view = instance.view(readState());
@@ -234,7 +234,7 @@ test('on Windows a run started through a .cmd launcher is fully stopped on timeo
 
 test('open offers the card even after the first offer and with tasks in the list', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'existing' }, NOW));
+  update((data) => addTask(data, { name: 'existing', steps: ['s'] }, NOW));
   const { instance, changes } = organizer(fakeLaunch('none'));
   instance.later();
   assert.equal(instance.view(readState()).offer, false);
@@ -251,7 +251,7 @@ test('the very first offer is marked as the first time', (t) => {
 
 test('declining an opened card closes it without starting anything', (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'existing' }, NOW));
+  update((data) => addTask(data, { name: 'existing', steps: ['s'] }, NOW));
   const { instance } = organizer(fakeLaunch('three'));
   instance.open();
   instance.later();
@@ -261,7 +261,7 @@ test('declining an opened card closes it without starting anything', (t) => {
 
 test('a run started from an opened card adds suggestions next to existing tasks, and can be repeated', async (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'existing' }, NOW));
+  update((data) => addTask(data, { name: 'existing', steps: ['s'] }, NOW));
   const { instance } = organizer(fakeLaunch('three'));
   instance.open();
   await instance.start();
@@ -286,10 +286,8 @@ test('open does nothing while a run is in progress', async (t) => {
 test('a run reports which existing tasks it updated, apart from new suggestions', async (t) => {
   useTempHome(t);
   update((data) => {
-    const task = addTask(data, { name: '已有的项目' }, NOW);
-    addStep(data, task.id, '第一步');
-    addStep(data, task.id, '第二步');
-    addTask(data, { name: '没被碰的任务' }, NOW);
+    addTask(data, { name: '已有的项目', steps: ['第一步', '第二步'] }, NOW);
+    addTask(data, { name: '没被碰的任务', steps: ['s'] }, NOW);
   });
   const { instance } = organizer(fakeLaunch('update'));
   instance.open();
@@ -302,7 +300,7 @@ test('a run reports which existing tasks it updated, apart from new suggestions'
 
 test('a run that changes no existing task reports none updated', async (t) => {
   useTempHome(t);
-  update((data) => addTask(data, { name: 'existing' }, NOW));
+  update((data) => addTask(data, { name: 'existing', steps: ['s'] }, NOW));
   const { instance } = organizer(fakeLaunch('three'));
   instance.open();
   await instance.start();
