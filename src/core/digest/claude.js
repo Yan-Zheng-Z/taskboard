@@ -39,18 +39,33 @@ function isTypedByUser(record) {
   return record.type === 'user' && !record.isMeta && !record.isSidechain && !record.isCompactSummary && !record.toolUseResult;
 }
 
+// How many leading lines are parsed just to check that the file is a Claude Code record.
+const PROBE_LINES = 5;
+
+// Returns { conversation, badLines }. Throws when the file has content but none of it
+// looks like a Claude Code record, so a changed format is reported, not read as "no conversations".
 function readSession(file) {
   const conversation = { agent: 'claude', project: null, title: null, messages: [] };
   let customTitle = null;
+  let seen = 0;
+  let recognized = false;
+  let badLines = 0;
   for (const line of linesOf(file)) {
-    // Most lines are assistant output and tool data: skip them without parsing.
-    if (!line.includes('"type":"user"') && !line.includes('-title"')) continue;
+    if (line.trim() === '') continue;
+    seen += 1;
+    // Most lines are assistant output and tool data: skip them without parsing,
+    // except the first few, which tell us whether this is the format we know.
+    const wanted = line.includes('"type":"user"') || line.includes('-title"');
+    if (!wanted && seen > PROBE_LINES) continue;
     let record;
     try {
       record = JSON.parse(line);
     } catch {
-      continue; // a line cut off mid-write
+      badLines += 1; // cut off mid-write, or not a record at all
+      continue;
     }
+    if (record !== null && typeof record === 'object' && typeof record.type === 'string') recognized = true;
+    if (!wanted) continue;
     if (record.type === 'custom-title') customTitle = record.customTitle ?? customTitle;
     else if (record.type === 'ai-title') conversation.title = record.aiTitle ?? conversation.title;
     else if (isTypedByUser(record)) {
@@ -58,14 +73,16 @@ function readSession(file) {
       conversation.messages.push({ time: record.timestamp ?? null, text: textOf(record.message?.content) });
     }
   }
+  if (seen > 0 && !recognized) throw new Error('not a Claude Code record');
   conversation.title = customTitle ?? conversation.title;
-  return conversation;
+  return { conversation, badLines };
 }
 
-// Returns { conversations, skipped } for sessions modified at or after sinceMs.
+// Returns { conversations, skipped, lines } for sessions modified at or after sinceMs:
+// skipped counts records that could not be read at all, lines counts unreadable lines in the rest.
 export function readClaudeConversations(home, sinceMs) {
   const root = path.join(home, 'projects');
-  const result = { conversations: [], skipped: 0 };
+  const result = { conversations: [], skipped: 0, lines: 0 };
   let projects;
   try {
     projects = fs.readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
@@ -77,7 +94,10 @@ export function readClaudeConversations(home, sinceMs) {
     for (const name of fs.readdirSync(dir).filter((entry) => entry.endsWith('.jsonl'))) {
       const file = path.join(dir, name);
       try {
-        if (fs.statSync(file).mtimeMs >= sinceMs) result.conversations.push(readSession(file));
+        if (fs.statSync(file).mtimeMs < sinceMs) continue;
+        const { conversation, badLines } = readSession(file);
+        result.conversations.push(conversation);
+        result.lines += badLines;
       } catch {
         result.skipped += 1;
       }

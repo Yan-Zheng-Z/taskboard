@@ -7,11 +7,24 @@ export function emptyData() {
   return { version: 1, nextTaskId: 1, tasks: [] };
 }
 
-function cleanName(name, what) {
-  if (typeof name !== 'string' || name.trim() === '') {
-    throw new TaskError(`${what} name must not be empty`);
+export const NAME_LIMIT = 200;
+const AUTHOR_LIMIT = 50;
+
+const hasControlCharacter = (text) => [...text].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127);
+
+// Names and other labels are one line of limited length: they are shown in a small
+// window and printed one per line in a terminal.
+function singleLine(value, what, limit) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (text === '') throw new TaskError(`${what} must not be empty`);
+  if (text.length > limit || hasControlCharacter(text)) {
+    throw new TaskError(`${what} must be a single line of at most ${limit} characters`);
   }
-  return name.trim();
+  return text;
+}
+
+function cleanName(name, what) {
+  return singleLine(name, `${what} name`, NAME_LIMIT);
 }
 
 const DUE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
@@ -26,8 +39,10 @@ export function parseDue(due) {
     const real = date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d
       && date.getHours() === h && date.getMinutes() === mi;
     if (real) return due.trim();
+    // Right format, but no such day or time (for example 30 February, or an hour skipped by a clock change).
+    throw new TaskError(`due date "${due}" does not exist: check the day and the time`);
   }
-  throw new TaskError(`invalid due date "${due}": use YYYY-MM-DD or "YYYY-MM-DD HH:mm"`);
+  throw new TaskError(`invalid due date "${due}": use YYYY-MM-DD or "YYYY-MM-DD HH:mm" (24-hour, two digits each)`);
 }
 
 function checkPercent(percent) {
@@ -37,10 +52,7 @@ function checkPercent(percent) {
 }
 
 function cleanAuthor(by) {
-  if (typeof by !== 'string' || by.trim() === '') {
-    throw new TaskError('author (--by) must not be empty');
-  }
-  return by.trim();
+  return singleLine(by, 'author (--by)', AUTHOR_LIMIT);
 }
 
 export function findTask(data, taskId) {
@@ -173,7 +185,7 @@ export function addSuggestion(data, { name, due, steps = [], source, by }, now) 
     name: cleanName(name, 'suggestion'),
     due: parseDue(due),
     steps: steps.map(toStep).map((step) => ({ name: cleanName(step.name, 'step'), done: step.done })),
-    source: typeof source === 'string' && source.trim() !== '' ? source.trim() : null,
+    source: typeof source === 'string' && source.trim() !== '' ? singleLine(source, 'source', NAME_LIMIT) : null,
     by: cleanAuthor(by),
     createdAt: now,
   };

@@ -173,7 +173,7 @@ test('an unreadable DeepSeek Harness record is skipped and reported; other conve
   writeDshSession(homes.dshHome, 'bad', [], { now: NOW, raw: Buffer.from('this is not zstd data') });
   const result = digest(homes);
   assert.deepEqual(result.conversations.map((c) => c.messages[0].text), ['还在']);
-  assert.deepEqual(result.skipped, [{ agent: 'deepseek', records: 1 }]);
+  assert.deepEqual(result.skipped, [{ agent: 'deepseek', records: 1, lines: 0 }]);
 });
 
 // ---- assembling ----

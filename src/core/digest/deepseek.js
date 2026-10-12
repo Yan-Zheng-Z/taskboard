@@ -28,9 +28,13 @@ function textOf(content) {
 // Returns the conversation, or null for a sub-agent session.
 function readSession(file) {
   const conversation = { agent: 'deepseek', project: null, title: null, messages: [] };
+  let first = true;
   for (const line of decompressFrames(file).split('\n')) {
     if (line === '') continue;
     const record = JSON.parse(line);
+    // Every session file starts with its session record; anything else is a format we do not know.
+    if (first && record?.type !== 'session') throw new Error('not a DeepSeek Harness session record');
+    first = false;
     if (record.type === 'session') {
       if (record.delegationDepth > 0) return null;
       conversation.project = record.cwd ?? null;
@@ -63,7 +67,7 @@ function sessionFiles(root) {
 
 // Returns { conversations, skipped } for sessions modified at or after sinceMs.
 export function readDeepseekConversations(home, sinceMs) {
-  const result = { conversations: [], skipped: 0 };
+  const result = { conversations: [], skipped: 0, lines: 0 };
   let files;
   try {
     files = sessionFiles(path.join(home, 'sessions'));

@@ -8,6 +8,7 @@ import {
   addSuggestion, pendingSuggestions, acceptSuggestion, dismissSuggestion,
 } from '../core/model.js';
 import { load, update } from '../core/store.js';
+import { describeTask } from '../core/view.js';
 import { buildDigest, agentHomes, AGENTS } from '../core/digest/index.js';
 
 const USAGE = `Usage: task <command> [arguments] [options]
@@ -52,26 +53,52 @@ Options
   --json         Machine-readable output
   -h, --help     Show this help`;
 
+// Options that make sense only once; repeating one is a mistake, not a list.
+const SINGLE_VALUE_OPTIONS = ['due', 'name', 'by', 'source', 'days', 'agent'];
+
+// The option parser's own messages talk about "positional arguments"; say it plainly.
+function plainMessage(error) {
+  if (error.code !== 'ERR_PARSE_ARGS_UNKNOWN_OPTION') return error.message;
+  const option = /'([^']+)'/.exec(error.message)?.[1] ?? '';
+  if (/^-\d/.test(option)) return `negative numbers are not valid here: "${option}"`;
+  return `unknown option "${option}". Run task --help to see the options`;
+}
+
 const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest'];
 
 function toId(value, what) {
-  if (value === undefined || !/^\d+$/.test(value)) {
+  // Fifteen digits is far beyond any real id and still exact as a number.
+  if (value === undefined || !/^\d{1,15}$/.test(value)) {
     throw new TaskError(`${what} id must be a number, got "${value ?? ''}"`);
   }
   return Number(value);
 }
 
-// Non-numeric input becomes NaN so the model reports the usual range error.
+// Quotes back what was typed, so "50%" is not reported as NaN.
 function toPercent(value) {
-  return /^\d+$/.test(value ?? '') ? Number(value) : NaN;
+  if (!/^\d{1,3}$/.test(value ?? '') || Number(value) > 100) {
+    throw new TaskError(`progress must be a whole number from 0 to 100, got "${value ?? ''}"`);
+  }
+  return Number(value);
 }
 
 function expectCount(positionals, counts, usage) {
   if (!counts.includes(positionals.length)) throw new TaskError(`usage: ${usage}`);
 }
 
+// Adds what the widget shows: progress, urgency state and whole days until the due date.
 function withProgress(task) {
-  return { ...task, progress: taskProgress(task) };
+  return { ...task, ...describeTask(task, Date.now()) };
+}
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+function urgency(task) {
+  const { state, days } = describeTask(task, Date.now());
+  if (state === 'done') return '[done]  ';
+  if (state === 'none') return '';
+  if (state === 'overdue') return days < 0 ? `[overdue by ${plural(-days, 'day')}]  ` : '[overdue]  ';
+  return days === 0 ? '[due today]  ' : `[${plural(days, 'day')} left]  `;
 }
 
 function localTime(iso) {
@@ -86,7 +113,7 @@ function updatedNote(item) {
 
 function listLine(task) {
   const due = task.due ? `due ${task.due}` : 'no due date';
-  return `#${task.id}  ${String(taskProgress(task)).padStart(3)}%  ${due}  ${task.name}`;
+  return `#${task.id}  ${String(taskProgress(task)).padStart(3)}%  ${due}  ${urgency(task)}${task.name}`;
 }
 
 function showLines(task) {
@@ -118,27 +145,28 @@ function shortTime(iso) {
 }
 
 function digestText(digest) {
-  const lines = [];
+  const out = [];
   if (digest.conversations.length === 0) {
-    lines.push(`No conversations found in the last ${digest.days} days.`);
+    out.push(`No conversations found in the last ${digest.days} days.`);
   } else {
-    lines.push(`Conversations from the last ${digest.days} days (${digest.conversations.length}). Only what the user typed is shown.`);
+    out.push(`Conversations from the last ${digest.days} days (${digest.conversations.length}). Only what the user typed is shown.`);
   }
   for (const conversation of digest.conversations) {
     const title = conversation.title ? ` ${conversation.title} -` : '';
-    lines.push('', `## [${conversation.agent}]${title} ${conversation.project ?? 'unknown folder'} - last active ${shortTime(conversation.lastActive)}`);
+    out.push('', `## [${conversation.agent}]${title} ${conversation.project ?? 'unknown folder'} - last active ${shortTime(conversation.lastActive)}`);
     conversation.messages.forEach((message, index) => {
-      if (index === conversation.omittedAfter) lines.push(`  (${conversation.omittedMessages} messages in between not shown)`);
-      lines.push(`- ${shortTime(message.time)}  ${message.text}`);
+      if (index === conversation.omittedAfter) out.push(`  (${conversation.omittedMessages} messages in between not shown)`);
+      out.push(`- ${shortTime(message.time)}  ${message.text}`);
     });
   }
   if (digest.omittedConversations > 0) {
-    lines.push('', `(${digest.omittedConversations} older conversations left out to keep this short; use a smaller --days to focus)`);
+    out.push('', `(${digest.omittedConversations} older conversations left out to keep this short; use a smaller --days to focus)`);
   }
-  for (const { agent, records } of digest.skipped) {
-    lines.push('', `Skipped: ${agent}: ${records} record(s) could not be read`);
+  for (const { agent, records, lines } of digest.skipped) {
+    const parts = [records > 0 && `${records} record(s)`, lines > 0 && `${lines} line(s)`].filter(Boolean);
+    out.push('', `Skipped: ${agent}: ${parts.join(' and ')} could not be read`);
   }
-  return lines.join('\n');
+  return out.join('\n');
 }
 
 function digestCommand(options, env) {
@@ -158,12 +186,13 @@ function setProgress(args, percent, by) {
   const now = new Date().toISOString();
   const taskId = toId(args[0], 'task');
   if (args.length === 1) {
-    update((data) => setTaskProgress(data, taskId, percent, by, now));
-    return `Task ${taskId} set to ${percent}%`;
+    const task = update((data) => setTaskProgress(data, taskId, percent, by, now));
+    return `Task ${taskId} set to ${percent}%: ${task.name}`;
   }
   const stepId = toId(args[1], 'step');
-  update((data) => setStepProgress(data, taskId, stepId, percent, by, now));
-  return `Task ${taskId} step ${stepId} set to ${percent}%`;
+  // The name lets the caller see that this was the step they meant.
+  const step = update((data) => setStepProgress(data, taskId, stepId, percent, by, now));
+  return `Task ${taskId} step ${stepId} set to ${percent}%: ${step.name}`;
 }
 
 function stepCommand(args) {
@@ -191,7 +220,7 @@ function stepCommand(args) {
 
 function execute(command, args, options, env) {
   // An empty TASKBOARD_ACTOR counts as unset; an explicitly empty --by is an error.
-  const by = options.by ?? (env.TASKBOARD_ACTOR || 'user');
+  const by = options.by ?? (env.TASKBOARD_ACTOR?.trim() || 'user');
   switch (command) {
     case 'add': {
       expectCount(args, [1], 'task add <name> [--due <date>]');
@@ -203,6 +232,9 @@ function execute(command, args, options, env) {
       const changes = {};
       if (options.name !== undefined) changes.name = options.name;
       if (options.due !== undefined) changes.due = options.due;
+      if (options['no-due'] && options.due !== undefined) {
+        throw new TaskError('--due and --no-due cannot be used together');
+      }
       if (options['no-due']) changes.due = null;
       if (Object.keys(changes).length === 0) {
         throw new TaskError('nothing to change: pass --name, --due or --no-due');
@@ -299,6 +331,11 @@ export function run(argv, { stdout, stderr, env }) {
       stdout(USAGE);
       return 0;
     }
+    for (const name of SINGLE_VALUE_OPTIONS) {
+      if (tokens.filter((token) => token.kind === 'option' && token.name === name).length > 1) {
+        throw new TaskError(`--${name} can be given only once`);
+      }
+    }
     // --step and --done-step may be mixed; the tokens keep the order they were typed in.
     values.orderedSteps = tokens
       .filter((token) => token.kind === 'option' && (token.name === 'step' || token.name === 'done-step'))
@@ -307,7 +344,7 @@ export function run(argv, { stdout, stderr, env }) {
     stdout(execute(command, args, values, env));
     return 0;
   } catch (error) {
-    stderr(`task: ${error.message}`);
+    stderr(`task: ${plainMessage(error)}`);
     return 1;
   }
 }

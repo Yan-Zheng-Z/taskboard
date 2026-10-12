@@ -23,7 +23,17 @@ export function agentHomes(env) {
 }
 
 // Cleans and trims one conversation; returns null when the user said nothing in it.
+// How taskboard's own background organize prompts begin (current wording and earlier ones).
+// Those runs are conversations too, but not something the user said.
+const OWN_PROMPTS = [
+  'Bring the user taskboard up to date',
+  'Find the projects the user is working on and file each one as a taskboard suggestion',
+  'Find things the user still needs to do and file them as taskboard suggestions',
+];
+
 function tidy(conversation) {
+  const firstText = conversation.messages[0]?.text.trim() ?? '';
+  if (OWN_PROMPTS.some((prompt) => firstText.startsWith(prompt))) return null;
   const messages = conversation.messages
     .map((message) => ({ time: message.time, text: cleanMessage(message.text, LIMITS.messageChars) }))
     .filter((message) => message.text !== '');
@@ -55,7 +65,7 @@ export function buildDigest({ claudeHome, dshHome, days, agents, now }) {
     // A file can change recently without the user having said anything recently.
     const active = (conversation) => conversation && !(Date.parse(conversation.lastActive) < sinceMs);
     all.push(...result.conversations.map(tidy).filter(active));
-    if (result.skipped > 0) skipped.push({ agent, records: result.skipped });
+    if (result.skipped > 0 || result.lines > 0) skipped.push({ agent, records: result.skipped, lines: result.lines });
   }
   // Most recent first; conversations without message times go last.
   all.sort((a, b) => (b.lastActive ?? '').localeCompare(a.lastActive ?? ''));

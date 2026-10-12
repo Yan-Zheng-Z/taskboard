@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emptyData, TaskError } from './model.js';
+import { validateData } from './validate.js';
 
 export class CorruptDataError extends TaskError {}
 
@@ -37,11 +38,6 @@ function retryWhileBusy(action) {
   }
 }
 
-function checkShape(data) {
-  const ok = data !== null && typeof data === 'object' && !Array.isArray(data)
-    && data.version === 1 && Number.isInteger(data.nextTaskId) && Array.isArray(data.tasks);
-  if (!ok) throw new Error('unexpected structure or version');
-}
 
 export function load() {
   const file = dataFile();
@@ -53,8 +49,9 @@ export function load() {
     throw error;
   }
   try {
-    const data = JSON.parse(text);
-    checkShape(data);
+    // Some Windows editors and PowerShell save UTF-8 with a byte order mark.
+    const data = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+    validateData(data);
     return data;
   } catch (error) {
     throw new CorruptDataError(
@@ -121,8 +118,13 @@ export function update(fn, { timeoutMs = LOCK_TIMEOUT_MS } = {}) {
     const data = load();
     const result = fn(data);
     const tempFile = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tempFile, `${JSON.stringify(data, null, 2)}\n`);
-    retryWhileBusy(() => fs.renameSync(tempFile, file));
+    try {
+      fs.writeFileSync(tempFile, `${JSON.stringify(data, null, 2)}\n`);
+      retryWhileBusy(() => fs.renameSync(tempFile, file));
+    } catch (error) {
+      fs.rmSync(tempFile, { force: true }); // do not leave a half-finished write behind
+      throw new TaskError(`cannot write ${file}: ${error.message}`);
+    }
     return result;
   } finally {
     fs.rmSync(lockFile, { force: true });
