@@ -57,10 +57,12 @@ Options
 const SINGLE_VALUE_OPTIONS = ['due', 'name', 'by', 'source', 'days', 'agent'];
 
 // The option parser's own messages talk about "positional arguments"; say it plainly.
-function plainMessage(error) {
+function plainMessage(error, argv) {
   if (error.code !== 'ERR_PARSE_ARGS_UNKNOWN_OPTION') return error.message;
   const option = /'([^']+)'/.exec(error.message)?.[1] ?? '';
-  if (/^-\d/.test(option)) return `negative numbers are not valid here: "${option}"`;
+  // The parser reads "-15" as flags and names only "-1": report what was actually typed.
+  const negative = /^-\d/.test(option) ? argv.find((arg) => /^-\d/.test(arg)) : undefined;
+  if (negative) return `negative numbers are not valid here: "${negative}"`;
   return `unknown option "${option}". Run task --help to see the options`;
 }
 
@@ -344,7 +346,7 @@ export function run(argv, { stdout, stderr, env }) {
     stdout(execute(command, args, values, env));
     return 0;
   } catch (error) {
-    stderr(`task: ${plainMessage(error)}`);
+    stderr(`task: ${plainMessage(error, argv)}`);
     return 1;
   }
 }

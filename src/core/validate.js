@@ -3,8 +3,6 @@
 // Length limits on names are deliberately not checked, so data saved before the
 // limits existed still loads.
 
-import { parseDue } from './model.js';
-
 function fail(message) {
   throw new Error(message);
 }
@@ -28,13 +26,19 @@ function checkIds(items, nextId, what, counterName) {
   }
 }
 
+const DUE_RE = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/;
+
+// A stored due date only has to be a real calendar date and clock time. Whether that
+// local time exists (clock changes) depends on the time zone, which may have changed
+// since the file was written, so that is not checked here.
 function checkDue(due, what) {
   if (due === null || due === undefined) return;
-  try {
-    parseDue(due);
-  } catch {
-    fail(`${what}: due date "${due}" is not valid`);
-  }
+  const match = typeof due === 'string' ? DUE_RE.exec(due) : null;
+  const [year, month, day, hour = 0, minute = 0] = match ? match.slice(1).filter((part) => part !== undefined).map(Number) : [];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const real = match !== null && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day && hour <= 23 && minute <= 59;
+  if (!real) fail(`${what}: due date "${due}" is not valid`);
 }
 
 function checkTask(task) {

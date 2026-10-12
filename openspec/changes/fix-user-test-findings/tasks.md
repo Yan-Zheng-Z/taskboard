@@ -29,4 +29,4 @@
 
 ## 6. 收尾
 
-- [ ] 6.1 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过
+- [x] 6.1 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过

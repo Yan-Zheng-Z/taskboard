@@ -582,15 +582,18 @@ function render() {
 
 // Finishing a task moves it to the end of the list; without this it would vanish
 // from under the user while still open.
-let lastOpen = { id: null, index: -1 };
+// Only when the open task itself changed state: other tasks coming and going above it
+// must not move the view.
+let lastOpen = { id: null, done: false };
 
 function followOpenTask() {
   const [id] = expanded;
-  const index = state.status === 'ok' ? state.tasks.findIndex((task) => task.id === id) : -1;
-  if (id === lastOpen.id && index !== -1 && index !== lastOpen.index) {
+  const task = state.status === 'ok' ? state.tasks.find((candidate) => candidate.id === id) : undefined;
+  const done = task?.state === 'done';
+  if (task && id === lastOpen.id && done !== lastOpen.done) {
     content.querySelector(`[data-key="task-${id}-head"]`)?.scrollIntoView({ block: 'start' });
   }
-  lastOpen = { id: id ?? null, index };
+  lastOpen = { id: id ?? null, done };
 }
 
 // ---- wiring ----

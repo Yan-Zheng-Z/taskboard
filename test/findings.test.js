@@ -327,3 +327,33 @@ test('the digest leaves out the organize runs that taskboard itself started', as
   writeClaudeSession(homes.claudeHome, 'real', [claudeUser('帮我看看 taskboard 的 task digest 命令为什么慢')]);
   assert.deepEqual(digestOf(homes).conversations.map((c) => c.messages[0].text), ['帮我看看 taskboard 的 task digest 命令为什么慢']);
 });
+
+// ---- found in code review ----
+
+test('a multi-digit negative number is quoted back whole', (t) => {
+  useTempHome(t);
+  task(['add', 'a']);
+  task(['step', 'add', '1', 's']);
+  const { code, err } = task(['progress', '1', '1', '-15']);
+  assert.notEqual(code, 0);
+  assert.ok(err.includes('"-15"'), err);
+});
+
+test('a stored due time that the local clock skips does not make the data file unreadable', (t) => {
+  useTempHome(t);
+  // 02:30 does not exist on these days in zones that move their clocks forward then
+  // (Sydney, Central Europe, US Eastern). A file saved before a time-zone change can hold one.
+  for (const due of ['2026-10-04 02:30', '2026-03-29 02:30', '2026-03-08 02:30']) {
+    writeData(goodFile([goodTask({ due })]));
+    assert.equal(load().tasks[0].due, due);
+    assert.equal(task(['list']).code, 0, due);
+  }
+});
+
+test('a stored due date that is not a calendar date is still rejected', (t) => {
+  useTempHome(t);
+  for (const due of ['2026-02-30', '2026-13-01', '2026-10-20 24:00', '2026-10-20 12:60', 20261020]) {
+    writeData(goodFile([goodTask({ due })]));
+    assert.throws(() => load(), CorruptDataError, String(due));
+  }
+});
