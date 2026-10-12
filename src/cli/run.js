@@ -1,0 +1,199 @@
+// The `task` command. run() returns an exit code and prints through the given
+// callbacks, so tests can call it in-process.
+
+import { parseArgs } from 'node:util';
+import {
+  TaskError, addTask, editTask, removeTask, addStep, renameStep, removeStep,
+  setStepProgress, setTaskProgress, taskProgress, findTask,
+} from '../core/model.js';
+import { load, update } from '../core/store.js';
+
+const USAGE = `Usage: task <command> [arguments] [options]
+
+Tasks
+  task add <name> [--due <date>]             Create a task, print its id
+  task edit <task> [--name <name>] [--due <date> | --no-due]
+  task rm <task>                             Delete a task
+
+Steps
+  task step add <task> <name>                Add a step, print its id
+  task step rename <task> <step> <name>
+  task step rm <task> <step>
+
+Progress
+  task progress <task> <step> <percent>      Set a step to 0-100
+  task progress <task> <percent>             Set a task that has no steps
+  task done <task> [<step>]                  Same as progress ... 100
+
+View
+  task list [--json]                         All tasks with due date and progress
+  task show <task> [--json]                  One task with its steps
+
+Options
+  --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
+  --by <name>    Who made the update. Defaults to $TASKBOARD_ACTOR, then "user"
+  --json         Machine-readable output
+  -h, --help     Show this help`;
+
+const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show'];
+
+function toId(value, what) {
+  if (value === undefined || !/^\d+$/.test(value)) {
+    throw new TaskError(`${what} id must be a number, got "${value ?? ''}"`);
+  }
+  return Number(value);
+}
+
+// Non-numeric input becomes NaN so the model reports the usual range error.
+function toPercent(value) {
+  return /^\d+$/.test(value ?? '') ? Number(value) : NaN;
+}
+
+function expectCount(positionals, counts, usage) {
+  if (!counts.includes(positionals.length)) throw new TaskError(`usage: ${usage}`);
+}
+
+function withProgress(task) {
+  return { ...task, progress: taskProgress(task) };
+}
+
+function localTime(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function updatedNote(item) {
+  return item.updatedBy ? `  (${item.updatedBy}, ${localTime(item.updatedAt)})` : '';
+}
+
+function listLine(task) {
+  const due = task.due ? `due ${task.due}` : 'no due date';
+  return `#${task.id}  ${String(taskProgress(task)).padStart(3)}%  ${due}  ${task.name}`;
+}
+
+function showLines(task) {
+  const lines = [`#${task.id}  ${task.name}`, `Due: ${task.due ?? 'none'}`];
+  lines.push(`Progress: ${taskProgress(task)}%${task.steps.length === 0 ? updatedNote(task) : ''}`);
+  if (task.steps.length === 0) lines.push('No steps.');
+  for (const step of task.steps) {
+    lines.push(`  ${step.id}. [${String(step.percent).padStart(3)}%] ${step.name}${updatedNote(step)}`);
+  }
+  return lines;
+}
+
+function setProgress(args, percent, by) {
+  const now = new Date().toISOString();
+  const taskId = toId(args[0], 'task');
+  if (args.length === 1) {
+    update((data) => setTaskProgress(data, taskId, percent, by, now));
+    return `Task ${taskId} set to ${percent}%`;
+  }
+  const stepId = toId(args[1], 'step');
+  update((data) => setStepProgress(data, taskId, stepId, percent, by, now));
+  return `Task ${taskId} step ${stepId} set to ${percent}%`;
+}
+
+function stepCommand(args) {
+  const [action, ...rest] = args;
+  if (action === 'add') {
+    expectCount(rest, [2], 'task step add <task> <name>');
+    const taskId = toId(rest[0], 'task');
+    const step = update((data) => addStep(data, taskId, rest[1]));
+    return `Added step ${step.id} to task ${taskId}: ${step.name}`;
+  }
+  if (action === 'rename') {
+    expectCount(rest, [3], 'task step rename <task> <step> <name>');
+    const [taskId, stepId] = [toId(rest[0], 'task'), toId(rest[1], 'step')];
+    update((data) => renameStep(data, taskId, stepId, rest[2]));
+    return `Renamed step ${stepId} of task ${taskId}`;
+  }
+  if (action === 'rm') {
+    expectCount(rest, [2], 'task step rm <task> <step>');
+    const [taskId, stepId] = [toId(rest[0], 'task'), toId(rest[1], 'step')];
+    update((data) => removeStep(data, taskId, stepId));
+    return `Removed step ${stepId} from task ${taskId}`;
+  }
+  throw new TaskError(`unknown step command "${action ?? ''}". Available: add, rename, rm`);
+}
+
+function execute(command, args, options, env) {
+  const by = options.by ?? env.TASKBOARD_ACTOR ?? 'user';
+  switch (command) {
+    case 'add': {
+      expectCount(args, [1], 'task add <name> [--due <date>]');
+      const task = update((data) => addTask(data, { name: args[0], due: options.due }, new Date().toISOString()));
+      return `Added task ${task.id}: ${task.name}`;
+    }
+    case 'edit': {
+      expectCount(args, [1], 'task edit <task> [--name <name>] [--due <date> | --no-due]');
+      const changes = {};
+      if (options.name !== undefined) changes.name = options.name;
+      if (options.due !== undefined) changes.due = options.due;
+      if (options['no-due']) changes.due = null;
+      if (Object.keys(changes).length === 0) {
+        throw new TaskError('nothing to change: pass --name, --due or --no-due');
+      }
+      const taskId = toId(args[0], 'task');
+      update((data) => editTask(data, taskId, changes));
+      return `Updated task ${taskId}`;
+    }
+    case 'rm': {
+      expectCount(args, [1], 'task rm <task>');
+      const taskId = toId(args[0], 'task');
+      const task = update((data) => removeTask(data, taskId));
+      return `Removed task ${taskId}: ${task.name}`;
+    }
+    case 'step':
+      return stepCommand(args);
+    case 'progress': {
+      expectCount(args, [2, 3], 'task progress <task> [<step>] <percent>');
+      return setProgress(args.slice(0, -1), toPercent(args.at(-1)), by);
+    }
+    case 'done': {
+      expectCount(args, [1, 2], 'task done <task> [<step>]');
+      return setProgress(args, 100, by);
+    }
+    case 'list': {
+      expectCount(args, [0], 'task list [--json]');
+      const { tasks } = load();
+      if (options.json) return JSON.stringify({ tasks: tasks.map(withProgress) }, null, 2);
+      if (tasks.length === 0) return 'No tasks yet. Add one with: task add "name" --due YYYY-MM-DD';
+      return tasks.map(listLine).join('\n');
+    }
+    case 'show': {
+      expectCount(args, [1], 'task show <task> [--json]');
+      const task = findTask(load(), toId(args[0], 'task'));
+      return options.json ? JSON.stringify(withProgress(task), null, 2) : showLines(task).join('\n');
+    }
+    default:
+      throw new TaskError(`unknown command "${command}". Available: ${COMMANDS.join(', ')}`);
+  }
+}
+
+export function run(argv, { stdout, stderr, env }) {
+  try {
+    const { values, positionals } = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        due: { type: 'string' },
+        name: { type: 'string' },
+        'no-due': { type: 'boolean' },
+        by: { type: 'string' },
+        json: { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+      },
+    });
+    if (values.help || positionals.length === 0) {
+      stdout(USAGE);
+      return 0;
+    }
+    const [command, ...args] = positionals;
+    stdout(execute(command, args, values, env));
+    return 0;
+  } catch (error) {
+    stderr(`task: ${error.message}`);
+    return 1;
+  }
+}

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A desktop task widget that you and your coding agents (Claude Code, DeepSeek Harness) update together.",
   "type": "module",
+  "main": "src/widget/main.js",
   "license": "MIT",
   "engines": {
     "node": ">=22"
@@ -21,5 +22,29 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.12.0",
     "globals": "^17.13.0"
-  }
+  },
+  "dependencies": {
+    "electron": "^44.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zyz122302-lang/taskboard.git"
+  },
+  "keywords": [
+    "task",
+    "todo",
+    "widget",
+    "electron",
+    "claude-code",
+    "deepseek",
+    "agent"
+  ],
+  "files": [
+    "src",
+    "assets",
+    "integrations",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ]
 }

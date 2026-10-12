@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>taskboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>任务</h1>
+    <button type="button" id="add-task" class="icon" aria-label="添加任务" title="添加任务">＋</button>
+    <button type="button" id="hide-window" class="icon" aria-label="隐藏窗口" title="隐藏窗口（点托盘图标恢复）">—</button>
+  </header>
+  <div id="notice" role="alert" hidden></div>
+  <main id="content"></main>
+  <script src="renderer.js"></script>
+</body>
+</html>
