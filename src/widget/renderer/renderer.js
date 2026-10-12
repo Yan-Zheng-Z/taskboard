@@ -383,10 +383,10 @@ function organizeCard() {
   return card([
     el('p', {}, [el('strong', { text: '从最近的对话里整理任务' })]),
     el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话，把还没做完的事列成建议，由你逐条决定是否采纳。' }),
-    el('p', { class: 'hint', text: '这些话的摘要会发送给 Claude 的模型，并消耗你的额度。只运行这一次。' }),
+    el('p', { class: 'hint', text: '这些话的摘要会发送给 Claude 的模型，每次整理都会消耗你的额度。' }),
     el('div', { class: 'row' }, [
       button('开始整理', 'primary', () => api.organize('start'), 'organize-start'),
-      button('以后再说', '', () => api.organize('later'), 'organize-later'),
+      button(organize.firstTime ? '以后再说' : '取消', '', () => api.organize('later'), 'organize-later'),
     ]),
   ]);
 }
@@ -440,6 +440,7 @@ function render() {
   const before = snapshot();
   const broken = state.status !== 'ok';
   document.getElementById('add-task').disabled = broken;
+  document.getElementById('organize').disabled = broken || state.organize?.phase === 'running';
 
   const nodes = [];
   if (broken) {
@@ -481,6 +482,11 @@ function render() {
 
 document.getElementById('add-task').addEventListener('click', openAddForm);
 document.getElementById('hide-window').addEventListener('click', () => api.hide());
+// Shows the organize card; nothing runs until the user confirms there.
+document.getElementById('organize').addEventListener('click', () => {
+  api.organize('open');
+  content.scrollTop = 0;
+});
 
 // A drag can end outside the slider without a change event.
 function endDrag() {

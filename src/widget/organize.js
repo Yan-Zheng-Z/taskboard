@@ -116,6 +116,7 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
   let reason = null;
   let running = null;
   let stop = null;
+  let requested = false;
 
   const set = (next) => {
     ({ phase, added = 0, reason = null } = next);
@@ -126,15 +127,25 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
     // What the window shows. `state` is the current readState() result.
     view(state) {
       const empty = state.status === 'ok' && state.tasks.length === 0 && state.suggestions.length === 0;
+      // Offered once on its own when the list is empty, and whenever the user asks for it.
+      const firstTime = !loadWidgetState().organizeOffered;
       return {
-        offer: phase === 'idle' && empty && !loadWidgetState().organizeOffered,
+        offer: phase === 'idle' && (requested || (empty && firstTime)),
+        firstTime,
         available: launch !== null,
         phase,
         added,
         reason,
       };
     },
+    // The user asked for the card from the title bar.
+    open() {
+      if (phase === 'running') return;
+      requested = true;
+      set({ phase: 'idle' });
+    },
     later() {
+      requested = false;
       markOrganizeOffered();
       onChange();
     },
@@ -148,6 +159,7 @@ export function createOrganizer({ launch, env, onChange, timeoutMs = TIMEOUT_MS 
     start() {
       if (running) return running;
       if (!launch) return Promise.resolve();
+      requested = false;
       markOrganizeOffered();
       const before = countSuggestions();
       set({ phase: 'running' });

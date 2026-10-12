@@ -87,7 +87,7 @@ task digest --days 3 --agent claude
 
 `task digest` 是给 Agent 读的材料：它只读取本机的对话记录，只保留你输入的文字（不含 Agent 的回复和命令输出），不联网，不修改任何文件。装好 skill 后，对 Agent 说"整理一下任务"，它会读这份摘要并提出建议。
 
-第一次启动小窗口且列表为空时，会出现一张卡片，点"开始整理"后由本机的 Claude Code 在后台做一次同样的事。这张卡片只出现一次。
+第一次启动小窗口且列表为空时，会出现一张卡片，点"开始整理"后由本机的 Claude Code 在后台做一次同样的事。这张卡片只自动出现一次；之后随时可以点标题栏的"整理"按钮再整理一遍，确认后才会运行。
 
 **隐私**：摘要里是你在对话中说过的话。Agent 读取它时，这些内容会发送给该 Agent 背后的模型服务商；默认两个来源都读，所以一家服务商会看到你和另一个 Agent 的对话摘要。用 `--agent` 可以只读一个来源。你在对话里粘贴过的敏感内容也可能出现在摘要里。
 
@@ -205,7 +205,7 @@ task digest --days 3 --agent claude
 
 `task digest` is reading material for an agent. It reads local conversation records only, keeps only the text you typed (no agent replies, no command output), makes no network requests and changes no files. With the skill installed, tell your agent "organize my tasks" and it reads the digest and files suggestions.
 
-The first time the window starts with an empty list, it shows a card offering to do this once in the background with your local Claude Code. The card appears only once.
+The first time the window starts with an empty list, it shows a card offering to do this once in the background with your local Claude Code. The card appears on its own only once; after that the "整理" (organize) button in the title bar brings it back whenever you want another pass, and nothing runs until you confirm.
 
 **Privacy**: the digest contains things you said in your conversations. When an agent reads it, that text goes to the agent's model provider. Both sources are read by default, so one provider sees a digest of your conversations with the other agent; use `--agent` to read only one. Sensitive text you pasted into a conversation can appear in the digest.
 

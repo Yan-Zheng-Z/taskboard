@@ -229,3 +229,54 @@ test('on Windows a run started through a .cmd launcher is fully stopped on timeo
   await new Promise((resolve) => setTimeout(resolve, 500));
   assert.throws(() => process.kill(pid, 0), 'the agent process behind the launcher is gone');
 });
+
+// ---- asking for a run at any time ----
+
+test('open offers the card even after the first offer and with tasks in the list', (t) => {
+  useTempHome(t);
+  update((data) => addTask(data, { name: 'existing' }, NOW));
+  const { instance, changes } = organizer(fakeLaunch('none'));
+  instance.later();
+  assert.equal(instance.view(readState()).offer, false);
+  instance.open();
+  const view = instance.view(readState());
+  assert.deepEqual([view.offer, view.firstTime], [true, false]);
+  assert.equal(changes.at(-1).offer, true);
+});
+
+test('the very first offer is marked as the first time', (t) => {
+  useTempHome(t);
+  assert.equal(organizer(fakeLaunch('none')).instance.view(readState()).firstTime, true);
+});
+
+test('declining an opened card closes it without starting anything', (t) => {
+  useTempHome(t);
+  update((data) => addTask(data, { name: 'existing' }, NOW));
+  const { instance } = organizer(fakeLaunch('three'));
+  instance.open();
+  instance.later();
+  assert.deepEqual([instance.view(readState()).offer, instance.view(readState()).phase], [false, 'idle']);
+  assert.equal(pendingSuggestions(load()).length, 0);
+});
+
+test('a run started from an opened card adds suggestions next to existing tasks, and can be repeated', async (t) => {
+  useTempHome(t);
+  update((data) => addTask(data, { name: 'existing' }, NOW));
+  const { instance } = organizer(fakeLaunch('three'));
+  instance.open();
+  await instance.start();
+  assert.deepEqual([instance.view(readState()).phase, instance.view(readState()).added], ['done', 3]);
+  instance.close();
+  instance.open();
+  assert.equal(instance.view(readState()).offer, true);
+});
+
+test('open does nothing while a run is in progress', async (t) => {
+  useTempHome(t);
+  const { instance } = organizer(fakeLaunch('hang'), { timeoutMs: 60_000 });
+  const finished = instance.start();
+  instance.open();
+  assert.deepEqual([instance.view(readState()).phase, instance.view(readState()).offer], ['running', false]);
+  instance.cancel();
+  await finished;
+});

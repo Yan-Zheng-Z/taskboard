@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('taskboard', {
   read: () => ipcRenderer.invoke('taskboard:read'),
   call: (method, payload) => ipcRenderer.invoke('taskboard:call', method, payload),
   hide: () => ipcRenderer.send('taskboard:hide'),
-  // action: 'start' | 'later' | 'close' — the one-time "organize from conversations" card
+  // action: 'open' | 'start' | 'later' | 'close' — the "organize from conversations" card
   organize: (action) => ipcRenderer.send('taskboard:organize', action),
   onState: (listener) => {
     ipcRenderer.on('taskboard:state', (_event, state) => listener(state));

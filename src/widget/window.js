@@ -67,7 +67,8 @@ export function connectWindow(window, { launch = claudeLaunch(findClaude(process
   });
   ipcMain.on('taskboard:hide', () => window.hide());
   ipcMain.on('taskboard:organize', (_event, action) => {
-    if (action === 'start') organizer.start();
+    if (action === 'open') organizer.open();
+    else if (action === 'start') organizer.start();
     else if (action === 'later') organizer.later();
     else if (action === 'close') organizer.close();
   });

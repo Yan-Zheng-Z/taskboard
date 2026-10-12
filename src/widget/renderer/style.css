@@ -83,6 +83,19 @@ button, input { font: inherit; color: inherit; }
 
 .icon:hover { background: var(--track); }
 
+.bar .text {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.bar .text:hover { background: var(--track); color: var(--text); }
+.bar button:disabled { opacity: 0.45; cursor: default; }
+
 #notice {
   margin: 8px 10px 0;
   padding: 6px 10px;
