@@ -1,0 +1,65 @@
+// Builds a short digest of recent agent conversations: what the user said, and where.
+// Read-only and local. Deciding which of it is a task is left to the agent that reads the digest.
+
+import os from 'node:os';
+import path from 'node:path';
+import { readClaudeConversations } from './claude.js';
+import { readDeepseekConversations } from './deepseek.js';
+import { cleanMessage } from './text.js';
+
+export const LIMITS = { messageChars: 300, messagesPerConversation: 20, totalChars: 60_000 };
+
+export const AGENTS = ['claude', 'deepseek'];
+
+const READERS = { claude: readClaudeConversations, deepseek: readDeepseekConversations };
+
+export function agentHomes(env) {
+  return {
+    claudeHome: env.TASKBOARD_CLAUDE_HOME || path.join(os.homedir(), '.claude'),
+    dshHome: env.TASKBOARD_DSH_HOME || env.DSH_HOME || path.join(os.homedir(), '.dsh'),
+  };
+}
+
+// Cleans and trims one conversation; returns null when the user said nothing in it.
+function tidy(conversation) {
+  const messages = conversation.messages
+    .map((message) => ({ time: message.time, text: cleanMessage(message.text, LIMITS.messageChars) }))
+    .filter((message) => message.text !== '');
+  if (messages.length === 0) return null;
+  const kept = messages.slice(-LIMITS.messagesPerConversation);
+  return {
+    agent: conversation.agent,
+    project: conversation.project,
+    title: conversation.title,
+    lastActive: messages.at(-1).time,
+    earlierMessages: messages.length - kept.length,
+    messages: kept,
+  };
+}
+
+const sizeOf = (conversation) => conversation.messages.reduce((sum, message) => sum + message.text.length, 0);
+
+export function buildDigest({ claudeHome, dshHome, days, agents, now }) {
+  const homes = { claude: claudeHome, deepseek: dshHome };
+  const sinceMs = now - days * 24 * 60 * 60 * 1000;
+  const all = [];
+  const skipped = [];
+  for (const agent of agents) {
+    const result = READERS[agent](homes[agent], sinceMs);
+    // A file can change recently without the user having said anything recently.
+    const active = (conversation) => conversation && !(Date.parse(conversation.lastActive) < sinceMs);
+    all.push(...result.conversations.map(tidy).filter(active));
+    if (result.skipped > 0) skipped.push({ agent, records: result.skipped });
+  }
+  all.sort((a, b) => String(b.lastActive).localeCompare(String(a.lastActive)));
+
+  // Keep the most recent conversations that fit; count the rest.
+  const conversations = [];
+  let total = 0;
+  for (const conversation of all) {
+    total += sizeOf(conversation);
+    if (total > LIMITS.totalChars) break;
+    conversations.push(conversation);
+  }
+  return { days, conversations, omittedConversations: all.length - conversations.length, skipped };
+}

@@ -8,6 +8,7 @@ import {
   addSuggestion, pendingSuggestions, acceptSuggestion, dismissSuggestion,
 } from '../core/model.js';
 import { load, update } from '../core/store.js';
+import { buildDigest, agentHomes, AGENTS } from '../core/digest/index.js';
 
 const USAGE = `Usage: task <command> [arguments] [options]
 
@@ -36,6 +37,12 @@ Suggestions (proposed tasks that wait for the user to accept or dismiss)
   task accept <suggestion>                   Turn a suggestion into a task
   task dismiss <suggestion>                  Drop it; it will not be suggested again
 
+Conversations
+  task digest [--days <n>] [--agent <name>] [--json]
+                                             What you said to your coding agents lately,
+                                             for an agent to turn into suggestions.
+                                             Reads local records only. Agents: claude, deepseek
+
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
   --step <name>  A step for the suggested task; repeat for several
@@ -44,7 +51,7 @@ Options
   --json         Machine-readable output
   -h, --help     Show this help`;
 
-const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss'];
+const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest'];
 
 function toId(value, what) {
   if (value === undefined || !/^\d+$/.test(value)) {
@@ -103,6 +110,45 @@ function suggestionLines(suggestion) {
   const lines = [`#${suggestion.id}  ${due}  ${suggestion.name}  (${origin})`];
   for (const step of suggestion.steps) lines.push(`      - ${step}`);
   return lines;
+}
+
+function shortTime(iso) {
+  return iso ? localTime(iso).slice(5) : '';
+}
+
+function digestText(digest) {
+  const lines = [];
+  if (digest.conversations.length === 0) {
+    lines.push(`No conversations found in the last ${digest.days} days.`);
+  } else {
+    lines.push(`Conversations from the last ${digest.days} days (${digest.conversations.length}). Only what the user typed is shown.`);
+  }
+  for (const conversation of digest.conversations) {
+    const title = conversation.title ? ` ${conversation.title} -` : '';
+    lines.push('', `## [${conversation.agent}]${title} ${conversation.project ?? 'unknown folder'} - last active ${shortTime(conversation.lastActive)}`);
+    if (conversation.earlierMessages > 0) lines.push(`(${conversation.earlierMessages} earlier messages not shown)`);
+    for (const message of conversation.messages) lines.push(`- ${shortTime(message.time)}  ${message.text}`);
+  }
+  if (digest.omittedConversations > 0) {
+    lines.push('', `(${digest.omittedConversations} older conversations left out to keep this short; use a smaller --days to focus)`);
+  }
+  for (const { agent, records } of digest.skipped) {
+    lines.push('', `Skipped: ${agent}: ${records} record(s) could not be read`);
+  }
+  return lines.join('\n');
+}
+
+function digestCommand(options, env) {
+  const days = /^\d+$/.test(options.days ?? '7') ? Number(options.days ?? '7') : 0;
+  if (days < 1 || days > 365) throw new TaskError(`--days must be a number from 1 to 365, got "${options.days}"`);
+  const agent = options.agent ?? 'all';
+  if (agent !== 'all' && !AGENTS.includes(agent)) {
+    throw new TaskError(`unknown agent "${agent}". Available: ${AGENTS.join(', ')}, all`);
+  }
+  const digest = buildDigest({
+    ...agentHomes(env), days, agents: agent === 'all' ? AGENTS : [agent], now: Date.now(),
+  });
+  return options.json ? JSON.stringify(digest, null, 2) : digestText(digest);
 }
 
 function setProgress(args, percent, by) {
@@ -217,6 +263,10 @@ function execute(command, args, options, env) {
       const suggestion = update((data) => dismissSuggestion(data, id));
       return `Dismissed suggestion ${id}: ${suggestion.name}`;
     }
+    case 'digest': {
+      expectCount(args, [0], 'task digest [--days <n>] [--agent <name>] [--json]');
+      return digestCommand(options, env);
+    }
     default:
       throw new TaskError(`unknown command "${command}". Available: ${COMMANDS.join(', ')}`);
   }
@@ -234,6 +284,8 @@ export function run(argv, { stdout, stderr, env }) {
         by: { type: 'string' },
         step: { type: 'string', multiple: true },
         source: { type: 'string' },
+        days: { type: 'string' },
+        agent: { type: 'string' },
         json: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
