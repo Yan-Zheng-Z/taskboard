@@ -114,7 +114,7 @@ New-Item -ItemType Directory -Force "$HOME\.dsh\skills" | Out-Null; Copy-Item -R
 
 限制：这样接入的 Agent 可以勾选步骤、添加任务、提出建议，但"整理"读不到它自己的历史对话，只能读到 Claude Code 和 DeepSeek Harness 的记录，以及它在当前会话里看得到的内容。
 
-如果你是在 Claude Code 里换用别的模型（例如通过兼容接口使用 GLM），它仍然是 Claude Code：直接按上面 Claude Code 一节接入，对话记录也能被"整理"读到。此时更新会署名为 `claude`；想区分的话，在该环境里设置环境变量 `TASKBOARD_ACTOR` 不起作用（skill 里写明了 `--by claude`），可以改用"其他 Agent"的方式并填你想要的署名。
+如果你是在 Claude Code 里换用别的模型（例如通过兼容接口使用 GLM），它仍然是 Claude Code：直接按上面 Claude Code 一节接入，对话记录也能被"整理"读到。此时更新会署名为 `claude`。想让窗口里显示成别的名字（例如 `glm`），就不要用设置里 Claude Code 的一键安装，改用上面“其他 Agent”的方式，填你想要的署名。
 
 想为某个 Agent 补上对话记录读取和一键安装，见仓库根目录的 `CONTRIBUTING.md`。
 
