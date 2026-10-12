@@ -80,7 +80,7 @@ function announceOrganize(before, after) {
   if (!after || before?.phase === after.phase) return;
   const text = {
     running: '正在从最近的对话里整理任务。',
-    done: after.added > 0 ? `整理完成，新增了 ${after.added} 条建议。` : '整理完成，没有找到待办事项。',
+    done: `整理完成，更新了 ${(after.updated ?? []).length} 个已有任务，新增了 ${after.added} 条建议。`,
     failed: '整理没有完成。',
   }[after.phase];
   if (text) document.getElementById('status').textContent = text;
@@ -401,10 +401,22 @@ function organizeCard() {
     ]);
   }
   if (organize.phase === 'done') {
-    const text = organize.added > 0
-      ? `新增了 ${organize.added} 条建议，请在下方逐条采纳或忽略。`
-      : '没有从最近的对话里找到待办事项。';
-    return card([el('p', { text }), dismiss('close', 'organize-close')]);
+    const updated = organize.updated ?? [];
+    const parts = [];
+    if (updated.length > 0) {
+      parts.push(
+        el('p', {}, [el('strong', { text: `更新了 ${updated.length} 个已有任务` })]),
+        el('ul', { class: 'suggested-steps' }, updated.map((task) => el('li', {
+          text: `${task.name}：${[
+            task.advancedSteps > 0 && `${task.advancedSteps} 个步骤有进展`,
+            task.addedSteps > 0 && `新增 ${task.addedSteps} 个步骤`,
+          ].filter(Boolean).join('，')}`,
+        }))),
+      );
+    }
+    if (organize.added > 0) parts.push(el('p', { text: `新增了 ${organize.added} 条建议，请在下方逐条采纳或忽略。` }));
+    if (parts.length === 0) parts.push(el('p', { text: '最近的对话里没有需要更新或新增的内容。' }));
+    return card([...parts, dismiss('close', 'organize-close')]);
   }
   if (organize.phase === 'failed') {
     return card([
@@ -424,7 +436,7 @@ function organizeCard() {
   }
   return card([
     el('p', {}, [el('strong', { text: '从最近的对话里整理任务' })]),
-    el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话，把还没做完的事列成建议，由你逐条决定是否采纳。' }),
+    el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话。列表里已有的任务会直接更新步骤和进度；新的项目列成建议，由你决定是否采纳。' }),
     el('p', { class: 'hint', text: '这些话的摘要会发送给 Claude 的模型，每次整理都会消耗你的额度。' }),
     el('div', { class: 'row' }, [
       button('开始整理', 'primary', () => api.organize('start'), 'organize-start'),

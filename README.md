@@ -37,7 +37,7 @@ taskboard
 ```
 
 - 窗口没有边框，始终在其他窗口上面；拖动顶部的标题栏移动它，位置会被记住。
-- 点任务展开步骤；拖滑块改进度，或点"完成"。
+- 点任务展开步骤，同一时间只展开一个任务；拖滑块改进度，或点"完成"。
 - 点右上角的向上箭头把窗口收成一条窄栏，只显示最近到期的未完成任务；再点一次恢复原来的大小。
 - 删除任务或步骤、忽略或采纳建议之后，窗口底部会出现几秒钟的"撤销"。
 - 点右上角的横线隐藏窗口，点系统托盘里的图标恢复。
@@ -87,7 +87,7 @@ task digest                   # 最近 7 天你对 Claude Code 和 DeepSeek Harn
 task digest --days 3 --agent claude
 ```
 
-`task digest` 是给 Agent 读的材料：它只读取本机的对话记录，只保留你输入的文字（不含 Agent 的回复和命令输出），不联网，不修改任何文件。装好 skill 后，对 Agent 说"整理一下任务"，它会读这份摘要并提出建议。
+`task digest` 是给 Agent 读的材料：它只读取本机的对话记录，只保留你输入的文字（不含 Agent 的回复和命令输出），不联网，不修改任何文件。装好 skill 后，对 Agent 说"整理一下任务"，它会读这份摘要：列表里已有的任务直接更新（把对话显示已完成的步骤标为完成、补上缺少的步骤，只向前推进，不删除也不改名），列表里没有的项目才作为建议提出。
 
 第一次启动小窗口且列表为空时，会出现一张卡片，点"开始整理"后由本机的 Claude Code 在后台做一次同样的事。这张卡片只自动出现一次；之后随时可以点标题栏的"整理"按钮再整理一遍，确认后才会运行。
 
@@ -157,7 +157,7 @@ taskboard
 ```
 
 - Frameless and always on top. Drag the title bar to move it; the position is remembered.
-- Click a task to see its steps. Drag a slider to change progress, or click "完成" (done).
+- Click a task to see its steps; only one task is open at a time. Drag a slider to change progress, or click "完成" (done).
 - The up arrow collapses the window to a strip showing only the next unfinished task; click it again to restore the previous size.
 - After you delete a task or step, or dismiss or accept a suggestion, an "撤销" (undo) bar appears at the bottom for a few seconds.
 - The dash hides the window; click the tray icon to bring it back.
@@ -207,7 +207,7 @@ task digest                   # what you typed to Claude Code and DeepSeek Harne
 task digest --days 3 --agent claude
 ```
 
-`task digest` is reading material for an agent. It reads local conversation records only, keeps only the text you typed (no agent replies, no command output), makes no network requests and changes no files. With the skill installed, tell your agent "organize my tasks" and it reads the digest and files suggestions.
+`task digest` is reading material for an agent. It reads local conversation records only, keeps only the text you typed (no agent replies, no command output), makes no network requests and changes no files. With the skill installed, tell your agent "organize my tasks" and it reads the digest: tasks already in the list are updated directly (steps the conversations show as finished are marked done and missing steps are added; progress only moves forward, nothing is deleted or renamed), and projects that are not in the list are filed as suggestions.
 
 The first time the window starts with an empty list, it shows a card offering to do this once in the background with your local Claude Code. The card appears on its own only once; after that the "整理" (organize) button in the title bar brings it back whenever you want another pass, and nothing runs until you confirm.
 

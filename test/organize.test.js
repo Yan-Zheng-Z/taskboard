@@ -8,7 +8,7 @@ import { findClaude, claudeLaunch, createOrganizer, ORGANIZE_PROMPT } from '../s
 import { loadWidgetState, markOrganizeOffered, saveBounds, loadBounds } from '../src/widget/window-state.js';
 import { readState, call } from '../src/widget/api.js';
 import { update } from '../src/core/store.js';
-import { addTask, addSuggestion, pendingSuggestions } from '../src/core/model.js';
+import { addTask, addStep, addSuggestion, pendingSuggestions } from '../src/core/model.js';
 import { load } from '../src/core/store.js';
 import { useTempHome } from './helpers/tmp-home.js';
 
@@ -279,4 +279,38 @@ test('open does nothing while a run is in progress', async (t) => {
   assert.deepEqual([instance.view(readState()).phase, instance.view(readState()).offer], ['running', false]);
   instance.cancel();
   await finished;
+});
+
+// ---- a run that updates tasks already in the list ----
+
+test('a run reports which existing tasks it updated, apart from new suggestions', async (t) => {
+  useTempHome(t);
+  update((data) => {
+    const task = addTask(data, { name: '已有的项目' }, NOW);
+    addStep(data, task.id, '第一步');
+    addStep(data, task.id, '第二步');
+    addTask(data, { name: '没被碰的任务' }, NOW);
+  });
+  const { instance } = organizer(fakeLaunch('update'));
+  instance.open();
+  await instance.start();
+  const view = instance.view(readState());
+  assert.equal(view.phase, 'done');
+  assert.equal(view.added, 1);
+  assert.deepEqual(view.updated, [{ id: 1, name: '已有的项目', advancedSteps: 1, addedSteps: 1 }]);
+});
+
+test('a run that changes no existing task reports none updated', async (t) => {
+  useTempHome(t);
+  update((data) => addTask(data, { name: 'existing' }, NOW));
+  const { instance } = organizer(fakeLaunch('three'));
+  instance.open();
+  await instance.start();
+  assert.deepEqual(instance.view(readState()).updated, []);
+});
+
+test('the prompt tells the agent to update existing tasks and never to remove or undo anything', () => {
+  assert.match(ORGANIZE_PROMPT, /task done/);
+  assert.match(ORGANIZE_PROMPT, /task step add/);
+  assert.match(ORGANIZE_PROMPT, /never (delete|remove)/i);
 });
