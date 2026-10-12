@@ -192,11 +192,11 @@ function confirmRow(question, onConfirm, onCancel) {
   ]);
 }
 
-function stepItem(task, step) {
+function stepItem(task, step, number) {
   const ids = { taskId: task.id, stepId: step.id };
   const base = `step-${task.id}-${step.id}`;
   const pct = el('span', { class: 'pct', text: `${step.percent}%` });
-  const item = el('li', { class: 'step' });
+  const item = el('li', { class: `step${step.percent === 100 ? ' finished' : ''}` });
 
   if (isOpen('rename-step', task.id, step.id)) {
     const form = el('form', {
@@ -216,7 +216,11 @@ function stepItem(task, step) {
   }
 
   item.append(
-    el('div', { class: 'step-top' }, [el('span', { class: 'name', text: step.name }), pct]),
+    el('div', { class: 'step-top' }, [
+      el('span', { class: 'step-number', 'aria-hidden': 'true', text: step.percent === 100 ? '✓' : String(number) }),
+      el('span', { class: 'name', text: step.name }),
+      pct,
+    ]),
     slider({
       key: `${base}-range`,
       label: `「${step.name}」的进度`,
@@ -248,7 +252,11 @@ function taskBody(task) {
   const body = el('div', { class: 'task-body' });
 
   if (task.steps.length > 0) {
-    body.append(el('ul', { class: 'steps' }, task.steps.map((step) => stepItem(task, step))));
+    const finished = task.steps.filter((step) => step.percent === 100).length;
+    body.append(
+      el('div', { class: 'steps-label', text: `步骤 · 已完成 ${finished} / ${task.steps.length}` }),
+      el('ol', { class: 'steps' }, task.steps.map((step, index) => stepItem(task, step, index + 1))),
+    );
   } else {
     const pct = el('span', { class: 'pct', text: `${task.progress}%` });
     body.append(
@@ -316,9 +324,13 @@ function taskCard(task) {
     key: `task-${task.id}-head`,
     'aria-expanded': String(isExpanded),
     onclick: () => {
-      if (isExpanded) expanded.delete(task.id);
-      else expanded.add(task.id);
+      // Only one task is open at a time, so the list stays short.
+      expanded.clear();
+      if (!isExpanded) expanded.add(task.id);
+      open = null; // an inline form in the task that just closed goes with it
       render();
+      // Closing a task above this one moves it; keep it in view.
+      content.querySelector(`[data-key="task-${task.id}-head"]`)?.scrollIntoView({ block: 'nearest' });
     },
   }, [
     el('span', { class: 'name', text: task.name }),
@@ -326,7 +338,7 @@ function taskCard(task) {
     el('span', { class: 'meter', 'aria-hidden': 'true' }, [fill]),
     el('span', { class: 'due', text: dueText(task) }),
   ]);
-  return el('section', { class: `task ${task.state}` }, [head, isExpanded && taskBody(task)]);
+  return el('section', { class: `task ${task.state}${isExpanded ? ' open' : ''}` }, [head, isExpanded && taskBody(task)]);
 }
 
 // ---- suggestions and the one-time organize card ----

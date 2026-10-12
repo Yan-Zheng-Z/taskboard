@@ -312,7 +312,7 @@ input[type="range"] {
 .step-top .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .task-body > .step-top { padding-top: 10px; border-top: 1px solid var(--line); }
-.task-body > form { padding-top: 10px; border-top: 1px solid var(--line); }
+.task-body > form { padding-top: 10px; }
 .task-body > form input[type="text"] { flex: 1 1 120px; }
 .task-body > .card-form { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid var(--line); border-radius: 0; }
 .task-actions { margin-top: 6px; justify-content: flex-end; }
@@ -355,3 +355,46 @@ input[type="range"] {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ---- the open task and its steps ---- */
+/* The open task is outlined, and its steps sit in a recessed, smaller, numbered list,
+   so a step is never mistaken for another task. */
+
+.task.open { box-shadow: 0 0 0 1.5px var(--ink); }
+.task.open .task-head { padding-bottom: 10px; }
+
+.steps-label {
+  margin: 2px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.task-body .steps {
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.task-body .step { padding: 8px 0; }
+.task-body .step:first-child { border-top: 0; }
+.step-top { justify-content: flex-start; }
+.step-top .name { flex: 1; }
+
+.step-number {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--track);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.step.finished .step-number { background: var(--done); color: var(--card); }
+.step.finished .name { color: var(--muted); }
