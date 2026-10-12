@@ -1,0 +1,19 @@
+// Stands in for a coding agent in the organize tests. The mode is the first argument.
+import { update } from '../../src/core/store.js';
+import { addSuggestion } from '../../src/core/model.js';
+
+const [mode] = process.argv.slice(2);
+const now = new Date().toISOString();
+
+if (mode === 'three') {
+  update((data) => {
+    for (const name of ['写论文第二章', '交报销单', '整理读书笔记']) {
+      addSuggestion(data, { name, source: 'fake conversation', by: 'claude' }, now);
+    }
+  });
+} else if (mode === 'fail') {
+  console.error('boom: the agent could not run');
+  process.exit(3);
+} else if (mode === 'hang') {
+  setInterval(() => {}, 1000);
+}

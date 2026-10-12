@@ -4,6 +4,7 @@ import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { readState, call } from './api.js';
 import { watchData } from './watch.js';
+import { createOrganizer, claudeLaunch, findClaude } from './organize.js';
 import { loadBounds, saveBounds, fitToDisplays } from './window-state.js';
 
 const here = (relative) => fileURLToPath(new URL(relative, import.meta.url));
@@ -49,19 +50,34 @@ export function createWidgetWindow({ show = true } = {}) {
 
 // Answers the page's requests and pushes fresh state when the data file changes.
 // Returns a function that stops watching.
-export function connectWindow(window) {
-  ipcMain.handle('taskboard:read', () => readState());
-  ipcMain.handle('taskboard:call', (_event, method, payload) => call(method, payload));
-  ipcMain.on('taskboard:hide', () => window.hide());
+// `launch` says how to start the agent for the one-time organize run; the default is the
+// user's Claude Code, or null when it is not installed.
+export function connectWindow(window, { launch = claudeLaunch(findClaude(process.env)) } = {}) {
+  // Everything the page draws: the task data plus the state of the organize card.
+  const withOrganize = (state) => ({ ...state, organize: organizer.view(state) });
   const push = () => {
-    if (!window.isDestroyed()) window.webContents.send('taskboard:state', readState());
+    if (!window.isDestroyed()) window.webContents.send('taskboard:state', withOrganize(readState()));
   };
+  const organizer = createOrganizer({ launch, env: process.env, onChange: push });
+
+  ipcMain.handle('taskboard:read', () => withOrganize(readState()));
+  ipcMain.handle('taskboard:call', (_event, method, payload) => {
+    const result = call(method, payload);
+    return { ...result, state: withOrganize(result.state) };
+  });
+  ipcMain.on('taskboard:hide', () => window.hide());
+  ipcMain.on('taskboard:organize', (_event, action) => {
+    if (action === 'start') organizer.start();
+    else if (action === 'later') organizer.later();
+    else if (action === 'close') organizer.close();
+  });
   const stopWatching = watchData(push);
   // "3 days left" goes stale at midnight even when the file never changes.
   const clock = setInterval(push, 60_000);
   return () => {
     clearInterval(clock);
     stopWatching();
+    organizer.cancel();
   };
 }
 

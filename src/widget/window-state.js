@@ -1,4 +1,5 @@
-// Remembers where the widget window was. Kept apart from the task data file.
+// The widget's own state: where its window was, and whether the one-time organize card
+// has been offered. Kept apart from the task data file.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,18 +18,35 @@ function isBounds(value) {
     && value.width > 0 && value.height > 0;
 }
 
-export function loadBounds() {
+function readFile() {
   try {
-    const { bounds } = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
-    return isBounds(bounds) ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+    const stored = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    return stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
-export function saveBounds(bounds) {
+function writeFile(changes) {
   fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(stateFile(), `${JSON.stringify({ bounds }, null, 2)}\n`);
+  fs.writeFileSync(stateFile(), `${JSON.stringify({ ...readFile(), ...changes }, null, 2)}\n`);
+}
+
+export function loadWidgetState() {
+  return { organizeOffered: readFile().organizeOffered === true };
+}
+
+export function markOrganizeOffered() {
+  writeFile({ organizeOffered: true });
+}
+
+export function loadBounds() {
+  const { bounds } = readFile();
+  return isBounds(bounds) ? { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height } : null;
+}
+
+export function saveBounds(bounds) {
+  writeFile({ bounds });
 }
 
 function overlap(a, b) {

@@ -286,6 +286,87 @@ function taskCard(task) {
   return el('section', { class: `task ${task.state}` }, [head, isExpanded && taskBody(task)]);
 }
 
+// ---- suggestions and the one-time organize card ----
+
+function suggestionItem(suggestion, index) {
+  const base = `sug-${suggestion.id}`;
+  // After this suggestion is gone, focus moves to the next one, or to "add task".
+  const next = state.suggestions[index + 1] ?? state.suggestions[index - 1];
+  const settle = async (method) => {
+    await act(method, { suggestionId: suggestion.id });
+    if (next) focusKey(`sug-${next.id}-accept`);
+    else document.getElementById('add-task').focus();
+  };
+  const facts = [
+    suggestion.due && `截止 ${suggestion.due}`,
+    suggestion.steps.length > 0 && `${suggestion.steps.length} 个步骤`,
+  ].filter(Boolean).join(' · ');
+  return el('li', { class: 'suggestion' }, [
+    el('div', { class: 'name', text: suggestion.name }),
+    facts && el('div', { class: 'hint', text: facts }),
+    suggestion.steps.length > 0 && el('div', { class: 'hint', text: suggestion.steps.join(' → ') }),
+    el('div', { class: 'hint', text: suggestion.source ? `${suggestion.by} · ${suggestion.source}` : `由 ${suggestion.by} 提出` }),
+    el('div', { class: 'row' }, [
+      button('采纳', 'small primary', () => settle('acceptSuggestion'), `${base}-accept`),
+      button('忽略', 'small', () => settle('dismissSuggestion'), `${base}-dismiss`),
+    ]),
+  ]);
+}
+
+function suggestionsSection() {
+  if (state.suggestions.length === 0) return null;
+  return el('section', { class: 'suggestions', 'aria-label': '任务建议' }, [
+    el('h2', { text: `建议（${state.suggestions.length}）` }),
+    el('p', { class: 'hint', text: '采纳后成为正式任务；忽略后不会再次提出。' }),
+    el('ul', { class: 'steps' }, state.suggestions.map(suggestionItem)),
+  ]);
+}
+
+function organizeCard() {
+  const { organize } = state;
+  if (!organize) return null;
+  const card = (children) => el('section', { class: 'card-form organize', 'aria-live': 'polite' }, children);
+  const dismiss = (action, key) => el('div', { class: 'row' }, [button('知道了', 'small', () => api.organize(action), key)]);
+
+  if (organize.phase === 'running') {
+    return card([
+      el('p', {}, [el('strong', { text: '正在从最近的对话里整理任务…' })]),
+      el('p', { class: 'hint', text: '可能需要一两分钟，窗口可以照常使用。' }),
+    ]);
+  }
+  if (organize.phase === 'done') {
+    const text = organize.added > 0
+      ? `新增了 ${organize.added} 条建议，请在下方逐条采纳或忽略。`
+      : '没有从最近的对话里找到待办事项。';
+    return card([el('p', { text }), dismiss('close', 'organize-close')]);
+  }
+  if (organize.phase === 'failed') {
+    return card([
+      el('p', {}, [el('strong', { text: '整理没有完成。' })]),
+      el('p', { class: 'hint', text: organize.reason ?? '' }),
+      el('p', { class: 'hint', text: '任务和建议没有受影响。你也可以在自己的 Agent 里说“整理一下任务”。' }),
+      dismiss('close', 'organize-close'),
+    ]);
+  }
+  if (!organize.offer) return null;
+  if (!organize.available) {
+    return card([
+      el('p', {}, [el('strong', { text: '从最近的对话里整理任务' })]),
+      el('p', { class: 'hint', text: '没有找到 Claude Code，无法在后台整理。你可以在自己的 Agent 里说“整理一下任务”，它会读取最近的对话并把建议列在这里。' }),
+      dismiss('later', 'organize-later'),
+    ]);
+  }
+  return card([
+    el('p', {}, [el('strong', { text: '从最近的对话里整理任务' })]),
+    el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话，把还没做完的事列成建议，由你逐条决定是否采纳。' }),
+    el('p', { class: 'hint', text: '这些话的摘要会发送给 Claude 的模型，并消耗你的额度。只运行这一次。' }),
+    el('div', { class: 'row' }, [
+      button('开始整理', 'primary', () => api.organize('start'), 'organize-start'),
+      button('以后再说', '', () => api.organize('later'), 'organize-later'),
+    ]),
+  ]);
+}
+
 function openAddForm() {
   setOpen({ kind: 'add-task' }, 'add-name');
 }
@@ -356,7 +437,11 @@ function render() {
         },
       }));
     }
-    if (state.tasks.length === 0 && !isOpen('add-task')) {
+    const card = organizeCard();
+    const suggestions = suggestionsSection();
+    nodes.unshift(card);
+    nodes.push(suggestions);
+    if (state.tasks.length === 0 && !card && !suggestions && !isOpen('add-task')) {
       nodes.push(el('div', { class: 'panel' }, [
         el('p', { text: '还没有任务。' }),
         button('添加第一个任务', 'primary', openAddForm, 'empty-add'),
@@ -364,7 +449,7 @@ function render() {
     }
     nodes.push(...state.tasks.map(taskCard));
   }
-  content.replaceChildren(...nodes);
+  content.replaceChildren(...nodes.filter(Boolean));
   restore(before);
 }
 

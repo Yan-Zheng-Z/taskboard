@@ -3,6 +3,7 @@
 
 import {
   addTask, editTask, removeTask, addStep, renameStep, removeStep, setStepProgress, setTaskProgress,
+  pendingSuggestions, acceptSuggestion, dismissSuggestion,
 } from '../core/model.js';
 import { load, update, dataFile } from '../core/store.js';
 import { describeTask, sortTasks } from '../core/view.js';
@@ -23,8 +24,13 @@ function toView(task, now) {
 
 export function readState(now = Date.now()) {
   try {
-    const { tasks } = load();
-    return { status: 'ok', file: dataFile(), tasks: sortTasks(tasks, now).map((task) => toView(task, now)) };
+    const data = load();
+    return {
+      status: 'ok',
+      file: dataFile(),
+      tasks: sortTasks(data.tasks, now).map((task) => toView(task, now)),
+      suggestions: pendingSuggestions(data),
+    };
   } catch (error) {
     return { status: 'error', file: dataFile(), message: error.message };
   }
@@ -46,6 +52,8 @@ const actions = new Map(Object.entries({
   removeStep: (data, p) => removeStep(data, p.taskId, p.stepId),
   setStepProgress: (data, p) => setStepProgress(data, p.taskId, p.stepId, p.percent, AUTHOR, stamp()),
   setTaskProgress: (data, p) => setTaskProgress(data, p.taskId, p.percent, AUTHOR, stamp()),
+  acceptSuggestion: (data, p) => acceptSuggestion(data, p.suggestionId, stamp()),
+  dismissSuggestion: (data, p) => dismissSuggestion(data, p.suggestionId),
 }));
 
 // Runs one named action. Always returns the current state so the window can redraw.
