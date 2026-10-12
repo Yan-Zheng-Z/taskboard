@@ -53,11 +53,24 @@ async function act(method, payload) {
   return result.ok;
 }
 
+// Tells screen readers when the background organize run starts and ends. The card itself is
+// rebuilt on every refresh, so it cannot serve as the live region.
+function announceOrganize(before, after) {
+  if (!after || before?.phase === after.phase) return;
+  const text = {
+    running: '正在从最近的对话里整理任务。',
+    done: after.added > 0 ? `整理完成，新增了 ${after.added} 条建议。` : '整理完成，没有找到待办事项。',
+    failed: '整理没有完成。',
+  }[after.phase];
+  if (text) document.getElementById('status').textContent = text;
+}
+
 function applyState(next) {
   if (dragging) {
     pendingState = next;
     return;
   }
+  announceOrganize(state?.organize, next.organize);
   state = next;
   render();
 }
@@ -288,12 +301,17 @@ function taskCard(task) {
 
 // ---- suggestions and the one-time organize card ----
 
+const settling = new Set();
+
 function suggestionItem(suggestion, index) {
   const base = `sug-${suggestion.id}`;
   // After this suggestion is gone, focus moves to the next one, or to "add task".
   const next = state.suggestions[index + 1] ?? state.suggestions[index - 1];
   const settle = async (method) => {
+    if (settling.has(suggestion.id)) return; // a second click while the first is being saved
+    settling.add(suggestion.id);
     await act(method, { suggestionId: suggestion.id });
+    settling.delete(suggestion.id);
     if (next) focusKey(`sug-${next.id}-accept`);
     else document.getElementById('add-task').focus();
   };
@@ -325,7 +343,7 @@ function suggestionsSection() {
 function organizeCard() {
   const { organize } = state;
   if (!organize) return null;
-  const card = (children) => el('section', { class: 'card-form organize', 'aria-live': 'polite' }, children);
+  const card = (children) => el('section', { class: 'card-form organize' }, children);
   const dismiss = (action, key) => el('div', { class: 'row' }, [button('知道了', 'small', () => api.organize(action), key)]);
 
   if (organize.phase === 'running') {
