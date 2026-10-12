@@ -1,6 +1,6 @@
 // Creates the widget window. Shared by the app (main.js) and the screenshot script.
 
-import { BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, screen } from 'electron';
 import { fileURLToPath } from 'node:url';
 import { readState, call } from './api.js';
 import { watchData } from './watch.js';
@@ -63,4 +63,16 @@ export function connectWindow(window) {
     clearInterval(clock);
     stopWatching();
   };
+}
+
+// Alt+F4 on the frameless window should hide it, like the "—" button, not destroy it:
+// the tray icon needs a window to bring back. Quitting from the tray still closes it.
+export function keepAliveOnClose(window) {
+  let quitting = false;
+  app.on('before-quit', () => { quitting = true; });
+  window.on('close', (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    window.hide();
+  });
 }

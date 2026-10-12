@@ -2,7 +2,7 @@
 
 import { app, Menu, Tray, nativeImage } from 'electron';
 import { fileURLToPath } from 'node:url';
-import { createWidgetWindow, connectWindow } from './window.js';
+import { createWidgetWindow, connectWindow, keepAliveOnClose } from './window.js';
 
 const appDir = fileURLToPath(new URL('../../', import.meta.url));
 const iconFile = fileURLToPath(new URL('../../assets/icon.png', import.meta.url));
@@ -43,6 +43,7 @@ function start() {
   window = createWidgetWindow();
   // Stay above full-screen and maximized windows too.
   window.setAlwaysOnTop(true, 'floating');
+  keepAliveOnClose(window);
 
   tray = new Tray(nativeImage.createFromPath(iconFile).resize({ width: 16, height: 16 }));
   tray.setToolTip('taskboard');
