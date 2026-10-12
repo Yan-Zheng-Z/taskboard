@@ -111,6 +111,26 @@ task digest --days 3 --agent claude
 
 两个 Agent 的对话记录格式都不是公开接口，它们升级后可能读不出来；读不出的记录会被跳过并在输出末尾说明。
 
+### 支持哪些 Agent
+
+| 功能 | 支持范围 |
+|---|---|
+| 在窗口里手动管理任务 | 不需要任何 Agent |
+| Agent 勾选步骤、添加任务 | 任何能执行命令行的 Agent |
+| 设置页里一键安装接入说明 | Claude Code、DeepSeek Harness |
+| "整理"时读取的对话记录 | Claude Code、DeepSeek Harness |
+| 窗口里的后台整理 | Claude Code |
+
+用其他 Agent（Codex、Cursor、接入 GLM 等模型的各种工具……）时，在设置页的"其他 Agent"里填一个署名并复制接入说明，或者运行：
+
+```
+task skill --by codex        # 打印接入说明，署名为 codex
+```
+
+把输出贴进那个 Agent 的指令文件（多数是 `AGENTS.md`）。之后它就能更新你的任务，窗口里会显示是它改的。它自己的历史对话不会被"整理"读到；想为某个 Agent 补上这一块，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+如果你是在 Claude Code 里换用了别的模型（例如通过兼容接口使用 GLM），那它仍然是 Claude Code，上表里 Claude Code 的各项都适用。
+
 ### 让 Agent 更新任务
 
 安装 taskboard 不会改动你的任何 Agent 配置。最简单的接入方法是在小窗口的设置里，对要用的 Agent 点"安装"；手动复制的方法和各项约定见 [docs/agent-integration.md](docs/agent-integration.md)，模板在 [integrations/](integrations/)。
@@ -142,7 +162,7 @@ npm run lint    # ESLint
 npm start       # 启动小窗口
 ```
 
-需求和设计在 `openspec/` 下，用 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 管理。提交前钩子会运行测试和 lint。
+需求和设计在 `openspec/` 下，用 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 管理。提交前钩子会运行测试和 lint。更多见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## English
 
@@ -251,6 +271,26 @@ The first time the window starts with an empty list, it shows a card offering to
 
 Neither agent's record format is a published interface, so an update may make records unreadable. Unreadable records are skipped and reported at the end of the output.
 
+### Which agents are supported
+
+| Feature | Works with |
+|---|---|
+| Managing tasks by hand in the window | no agent needed |
+| An agent ticking steps and adding tasks | any agent that can run shell commands |
+| One-click install of the instructions in the settings | Claude Code, DeepSeek Harness |
+| Conversation records read by "organize" | Claude Code, DeepSeek Harness |
+| Background organize from the window | Claude Code |
+
+For another agent (Codex, Cursor, tools running GLM or other models, ...), enter a name under "其他 Agent" (other agent) in the settings and copy the instructions, or run:
+
+```
+task skill --by codex        # prints the instructions, signed as codex
+```
+
+Paste the output into that agent's instruction file (often `AGENTS.md`). It can then update your tasks, and the window shows that it did. Its own conversation history is not read by "organize"; to add that for an agent, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+If you run a different model inside Claude Code (for example GLM through a compatible endpoint), it is still Claude Code, and everything listed for Claude Code applies.
+
 ### Letting agents update tasks
 
 Installing taskboard does not change any agent configuration. The easiest way to connect an agent is the "安装" (install) button next to it in the window's settings. For copying by hand and for the conventions, see [docs/agent-integration.md](docs/agent-integration.md); the templates are in [integrations/](integrations/).
@@ -282,7 +322,7 @@ npm run lint    # ESLint
 npm start       # start the window
 ```
 
-Requirements and design live in `openspec/`, managed with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The pre-commit hook runs tests and lint.
+Requirements and design live in `openspec/`, managed with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The pre-commit hook runs tests and lint. More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

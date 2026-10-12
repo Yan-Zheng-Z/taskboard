@@ -11,6 +11,7 @@ import { load, update } from '../core/store.js';
 import { describeTask, activeTasks, allArchived } from '../core/view.js';
 import { buildDigest, agentHomes, AGENTS } from '../core/digest/index.js';
 import { loadSettings } from '../core/settings.js';
+import { skillText } from '../core/skill-text.js';
 
 const USAGE = `Usage: task <command> [arguments] [options]
 
@@ -47,6 +48,11 @@ Conversations
                                              Reads local records only. Agents: claude, deepseek.
                                              Defaults come from the settings in the window.
 
+Connecting an agent
+  task skill --by <name>                     Print the instructions that teach an agent to use
+                                             taskboard, signed as <name>, to paste into its
+                                             instruction file (often AGENTS.md)
+
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
   --step <name>  A step that is still to do; repeat for several. Steps keep the order given
@@ -69,7 +75,7 @@ function plainMessage(error, argv) {
   return `unknown option "${option}". Run task --help to see the options`;
 }
 
-const COMMANDS = ['add', 'edit', 'rm', 'step', 'done', 'reopen', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest'];
+const COMMANDS = ['add', 'edit', 'rm', 'step', 'done', 'reopen', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss', 'digest', 'skill'];
 
 function toId(value, what) {
   // Fifteen digits is far beyond any real id and still exact as a number.
@@ -335,6 +341,12 @@ function execute(command, args, options, env) {
       const id = toId(args[0], 'suggestion');
       const suggestion = update((data) => dismissSuggestion(data, id));
       return `Dismissed suggestion ${id}: ${suggestion.name}`;
+    }
+    case 'skill': {
+      expectCount(args, [0], 'task skill --by <name>');
+      // The name is asked for explicitly: this is what the agent will sign with, not who is running the command.
+      if (options.by === undefined) throw new TaskError('task skill needs --by <name>: the name the agent should sign with, for example --by codex');
+      return skillText({ by: options.by }).trimEnd();
     }
     case 'digest': {
       expectCount(args, [0], 'task digest [--days <n>] [--agent <name>] [--json]');

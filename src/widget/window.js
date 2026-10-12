@@ -1,12 +1,13 @@
 // Creates the widget window. Shared by the app (main.js) and the screenshot script.
 
-import { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, nativeTheme, screen, shell } from 'electron';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readState, call } from './api.js';
 import { dataDir } from '../core/store.js';
 import { loadSettings, saveSetting } from '../core/settings.js';
 import { agentStatuses, installAgentSkill } from './agents.js';
+import { skillText } from '../core/skill-text.js';
 import { watchData } from './watch.js';
 import { createOrganizer, claudeLaunch, findClaude } from './organize.js';
 import {
@@ -131,6 +132,9 @@ export function connectWindow(window, {
   ipcMain.handle('taskboard:set-autostart', (_event, enabled) => answer(() => autostart.set(enabled === true)));
   // The only place that writes into an agent's directory, and only on this explicit request.
   ipcMain.handle('taskboard:install-skill', (_event, id) => answer(() => installAgentSkill(id, process.env)));
+  // For agents without a built-in entry: the same instructions under a name the user picks,
+  // on the clipboard for them to paste into that agent's instruction file.
+  ipcMain.handle('taskboard:copy-skill', (_event, name) => answer(() => clipboard.writeText(skillText({ by: name }))));
   ipcMain.on('taskboard:open-data-folder', () => {
     fs.mkdirSync(dataDir(), { recursive: true });
     shell.openPath(dataDir());

@@ -9,10 +9,11 @@ contextBridge.exposeInMainWorld('taskboard', {
   setCompact: (compact) => ipcRenderer.send('taskboard:compact', compact),
   // action: 'open' | 'start' | 'later' | 'close' — the "organize from conversations" card
   organize: (action) => ipcRenderer.send('taskboard:organize', action),
-  // Settings. Each of the first three answers { ok, error?, state }.
+  // Settings. The ones that use invoke answer { ok, error?, state }.
   setSetting: (key, value) => ipcRenderer.invoke('taskboard:set-setting', key, value),
   setAutostart: (enabled) => ipcRenderer.invoke('taskboard:set-autostart', enabled),
   installSkill: (agentId) => ipcRenderer.invoke('taskboard:install-skill', agentId),
+  copySkill: (name) => ipcRenderer.invoke('taskboard:copy-skill', name),
   openDataFolder: () => ipcRenderer.send('taskboard:open-data-folder'),
   openRepo: () => ipcRenderer.send('taskboard:open-repo'),
   onState: (listener) => {

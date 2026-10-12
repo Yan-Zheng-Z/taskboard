@@ -105,7 +105,18 @@ New-Item -ItemType Directory -Force "$HOME\.dsh\skills" | Out-Null; Copy-Item -R
 
 ## 其他 Agent
 
-把任一模板的正文放进该 Agent 的指令文件（如 `AGENTS.md`），并把 `--by` 后面的名字换成你想显示的署名。也可以设置环境变量 `TASKBOARD_ACTOR`，这样不写 `--by` 时就用它。
+任何能执行命令行的 Agent 都可以更新任务。两种等价的做法：
+
+- 在小窗口的设置里，"Agent 接入"下的"其他 Agent"填一个署名（例如 `codex`、`glm`），点"复制接入说明"。
+- 或者运行 `task skill --by codex`，复制它的输出。
+
+把这段文字贴进那个 Agent 的指令文件（多数是 `AGENTS.md`）。署名是一个不含空格的词，窗口里会用它显示每一步是谁更新的。
+
+限制：这样接入的 Agent 可以勾选步骤、添加任务、提出建议，但"整理"读不到它自己的历史对话，只能读到 Claude Code 和 DeepSeek Harness 的记录，以及它在当前会话里看得到的内容。
+
+如果你是在 Claude Code 里换用别的模型（例如通过兼容接口使用 GLM），它仍然是 Claude Code：直接按上面 Claude Code 一节接入，对话记录也能被"整理"读到。此时更新会署名为 `claude`；想区分的话，在该环境里设置环境变量 `TASKBOARD_ACTOR` 不起作用（skill 里写明了 `--by claude`），可以改用"其他 Agent"的方式并填你想要的署名。
+
+想为某个 Agent 补上对话记录读取和一键安装，见仓库根目录的 `CONTRIBUTING.md`。
 
 ## English summary
 
@@ -113,7 +124,7 @@ Agents update taskboard by running the `task` command, so any agent that can run
 
 - **Claude Code**: copy `integrations/claude/taskboard` into `~/.claude/skills/` (or a project's `.claude/skills/`). Allow the `task` command when asked, or add `"Bash(task:*)"` to `permissions.allow`. Updates are signed `claude`.
 - **DeepSeek Harness**: copy `integrations/dsh/taskboard` into `~/.dsh/skills/` (or a project's `.dsh/skills/`). Under the default `workspace-write` permissions, commands that change data may be denied by the sandbox the first time because the data lives in your home directory; approve the escalation prompt. This is based on the DeepSeek Harness package docs and has not been tested end to end. Updates are signed `deepseek`.
-- **Other agents**: put the template body into the agent's instruction file and change the name after `--by`, or set `TASKBOARD_ACTOR`.
+- **Other agents**: any agent that can run shell commands. Enter a name under "其他 Agent" in the window's settings and copy the instructions, or run `task skill --by <name>`, and paste the text into the agent's instruction file (often `AGENTS.md`). Such an agent can tick steps, add tasks and file suggestions, but "organize" cannot read its own conversation history. A different model run inside Claude Code (for example GLM through a compatible endpoint) is still Claude Code.
 
 Conventions: agents use the `task` command only, mark steps done only after you say which task the work belongs to, and do not create, rename or delete tasks or steps unless asked. New tasks an agent infers from your conversations are filed as suggestions for you to accept or dismiss. When organizing, an agent may update tasks that already exist: mark steps finished and add missing steps, only ever marking done, signed, never reopening, deleting or renaming. Steps are either done or not; a task whose steps are all done is archived by itself.
 

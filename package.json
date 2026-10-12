@@ -45,6 +45,8 @@
     "integrations",
     "docs",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "scripts"
   ]
 }

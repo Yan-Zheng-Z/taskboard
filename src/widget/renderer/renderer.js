@@ -414,6 +414,7 @@ function organizeCard() {
 
 function showPage(next) {
   page = next;
+  copyNote = '';
   expanded.clear();
   open = null;
   content.scrollTop = 0;
@@ -513,6 +514,39 @@ function toggle(label, key, checked, onchange, { disabled = false, hint } = {}) 
   ]);
 }
 
+// What the settings page says after instructions were copied for another agent.
+let copyNote = '';
+
+async function copySkillFor(input) {
+  const name = input.value.trim();
+  if (!name) {
+    copyNote = '';
+    showNotice('请先填写这个 Agent 的署名，例如 codex');
+    render();
+    input.focus();
+    return;
+  }
+  const result = await api.copySkill(name);
+  showNotice(result.ok ? '' : result.error);
+  copyNote = result.ok ? `已复制署名为 ${name} 的接入说明。把它粘贴到该 Agent 的指令文件里（多数是 AGENTS.md）。` : '';
+  applyState(result.state);
+}
+
+// Any agent that can run shell commands can use taskboard; only these two have one-click install.
+function otherAgentRow() {
+  const input = el('input', { type: 'text', key: 'other-agent-name', placeholder: '署名，例如 codex', 'aria-label': '其他 Agent 的署名', maxlength: 50 });
+  return el('div', { class: 'setting other-agent' }, [
+    el('span', { class: 'setting-label' }, [
+      document.createTextNode('其他 Agent'),
+      el('span', { class: 'hint setting-hint', text: '能执行命令行的 Agent 都可以接入' }),
+    ]),
+    el('span', { class: 'other-agent-form' }, [
+      input,
+      button('复制接入说明', 'small', () => copySkillFor(input), 'other-agent-copy'),
+    ]),
+  ]);
+}
+
 const SKILL_TEXT = { missing: '接入说明未安装', current: '接入说明已安装', outdated: '接入说明需要更新' };
 
 function agentRow(agent) {
@@ -552,6 +586,8 @@ function settingsPage() {
     ]),
     section('Agent 接入', [
       ...agents.map(agentRow),
+      otherAgentRow(),
+      copyNote && el('p', { class: 'hint settings-note', role: 'status', text: copyNote }),
       el('p', { class: 'hint settings-note', text: '点“安装”会把 taskboard 的接入说明复制到该 Agent 自己的目录，它才知道怎么更新你的任务。不点就不会改动它的任何文件。' }),
     ]),
     section('整理', [

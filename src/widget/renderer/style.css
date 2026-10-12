@@ -452,3 +452,8 @@ label.setting { cursor: pointer; }
 .bar .icon[aria-pressed="true"] { background: var(--hover); color: var(--text); }
 /* Buttons and status text in a settings row keep their width; the label gives way. */
 .setting > .btn, .setting > .hint { flex: none; white-space: nowrap; }
+
+.setting.other-agent { flex-wrap: wrap; }
+.other-agent-form { display: flex; flex: 1 1 100%; gap: 6px; }
+.other-agent-form input[type="text"] { flex: 1 1 0; }
+.other-agent-form .btn { flex: none; white-space: nowrap; }
