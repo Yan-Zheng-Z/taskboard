@@ -16,7 +16,10 @@
 
 ### 状态
 
-早期版本。只在 Windows 11 上测试过；代码没有使用 Windows 专有接口，但 macOS 和 Linux 未经测试。界面文字是中文，命令行输出是英文。
+早期版本。界面文字是中文，命令行输出是英文。
+
+- **Windows 11**：日常使用并测试过。
+- **macOS、Linux**：自动测试（命令行、数据、整理、设置等逻辑）在这两个系统上通过；但小窗口本身、菜单栏或托盘图标、开机自启都没有在真机上试过。如果你在这两个系统上使用，欢迎反馈。
 
 ### 安装
 
@@ -52,7 +55,7 @@ taskboard
 - 右键托盘图标可以开关"开机自动启动"或退出；这个开关在设置里也有。
 - 只用键盘也能操作：Tab 移动，空格或回车展开任务，空格勾选步骤。
 
-开机自启记录的是源码目录的位置，移动目录后需要重新开启一次。
+开机自启记录的是源码目录的位置，移动目录后需要重新开启一次。在 macOS 上它是 `~/Library/LaunchAgents` 下的一个文件，在 Linux 上是 `~/.config/autostart` 下的一个桌面项。
 
 ### 命令行
 
@@ -153,7 +156,10 @@ A small always-on-top desktop window plus a `task` command. You tick off finishe
 
 ### Status
 
-Early release. Tested on Windows 11 only. The code avoids Windows-only APIs, but macOS and Linux are untested. The window's text is in Chinese; command-line output is in English.
+Early release. The window's text is in Chinese; command-line output is in English.
+
+- **Windows 11**: used daily and tested.
+- **macOS, Linux**: the automated tests (command line, data, organize, settings) pass on both. The window itself, the menu-bar or tray icon and start-at-login have not been tried on a real machine. Reports are welcome.
 
 ### Install
 
@@ -189,7 +195,7 @@ taskboard
 - Right-click the tray icon to toggle start-at-login or to quit; the same switch is in the settings.
 - Fully usable from the keyboard: Tab to move, Space or Enter to expand a task, Space to tick a step.
 
-Start-at-login stores the location of the source directory. Turn it on again if you move the directory.
+Start-at-login stores the location of the source directory. Turn it on again if you move the directory. On macOS it is a file under `~/Library/LaunchAgents`; on Linux, a desktop entry under `~/.config/autostart`.
 
 ### Command line
 
