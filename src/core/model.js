@@ -144,3 +144,61 @@ export function taskProgress(task) {
   const sum = task.steps.reduce((total, step) => total + step.percent, 0);
   return Math.round(sum / task.steps.length);
 }
+
+// ---- suggestions ----
+// Tasks proposed by an agent wait here until the user accepts or dismisses them.
+// The three fields are optional in the data file; files written before they existed have none.
+
+const DISMISSED_LIMIT = 500;
+
+const sameName = (name) => name.trim().toLowerCase();
+
+export function pendingSuggestions(data) {
+  return data.suggestions ?? [];
+}
+
+function findSuggestion(data, suggestionId) {
+  const suggestion = pendingSuggestions(data).find((s) => s.id === suggestionId);
+  if (!suggestion) throw new TaskError(`suggestion ${suggestionId} does not exist`);
+  return suggestion;
+}
+
+// Returns { saved } or { skipped: 'task' | 'pending' | 'dismissed' } when the name is already known.
+export function addSuggestion(data, { name, due, steps = [], source, by }, now) {
+  const suggestion = {
+    id: data.nextSuggestionId ?? 1,
+    name: cleanName(name, 'suggestion'),
+    due: parseDue(due),
+    steps: steps.map((step) => cleanName(step, 'step')),
+    source: typeof source === 'string' && source.trim() !== '' ? source.trim() : null,
+    by: cleanAuthor(by),
+    createdAt: now,
+  };
+  const key = sameName(suggestion.name);
+  if (data.tasks.some((task) => sameName(task.name) === key)) return { skipped: 'task' };
+  if (pendingSuggestions(data).some((s) => sameName(s.name) === key)) return { skipped: 'pending' };
+  if ((data.dismissed ?? []).includes(key)) return { skipped: 'dismissed' };
+  data.nextSuggestionId = suggestion.id + 1;
+  data.suggestions = [...pendingSuggestions(data), suggestion];
+  return { saved: suggestion };
+}
+
+function takeSuggestion(data, suggestionId) {
+  const suggestion = findSuggestion(data, suggestionId);
+  data.suggestions = data.suggestions.filter((s) => s !== suggestion);
+  return suggestion;
+}
+
+export function acceptSuggestion(data, suggestionId, now) {
+  const suggestion = takeSuggestion(data, suggestionId);
+  const task = addTask(data, { name: suggestion.name, due: suggestion.due }, now);
+  for (const step of suggestion.steps) addStep(data, task.id, step);
+  return task;
+}
+
+// Remembers the name so the same suggestion is not offered again.
+export function dismissSuggestion(data, suggestionId) {
+  const suggestion = takeSuggestion(data, suggestionId);
+  data.dismissed = [...(data.dismissed ?? []), sameName(suggestion.name)].slice(-DISMISSED_LIMIT);
+  return suggestion;
+}

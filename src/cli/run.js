@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 import {
   TaskError, addTask, editTask, removeTask, addStep, renameStep, removeStep,
   setStepProgress, setTaskProgress, taskProgress, findTask,
+  addSuggestion, pendingSuggestions, acceptSuggestion, dismissSuggestion,
 } from '../core/model.js';
 import { load, update } from '../core/store.js';
 
@@ -29,13 +30,21 @@ View
   task list [--json]                         All tasks with due date and progress
   task show <task> [--json]                  One task with its steps
 
+Suggestions (proposed tasks that wait for the user to accept or dismiss)
+  task suggest <name> [--due <date>] [--step <name>]... [--source <text>]
+  task suggestions [--json]                  Pending suggestions
+  task accept <suggestion>                   Turn a suggestion into a task
+  task dismiss <suggestion>                  Drop it; it will not be suggested again
+
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
+  --step <name>  A step for the suggested task; repeat for several
+  --source <text> Where a suggestion came from, e.g. which conversation
   --by <name>    Who made the update. Defaults to $TASKBOARD_ACTOR, then "user"
   --json         Machine-readable output
   -h, --help     Show this help`;
 
-const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show'];
+const COMMANDS = ['add', 'edit', 'rm', 'step', 'progress', 'done', 'list', 'show', 'suggest', 'suggestions', 'accept', 'dismiss'];
 
 function toId(value, what) {
   if (value === undefined || !/^\d+$/.test(value)) {
@@ -79,6 +88,20 @@ function showLines(task) {
   for (const step of task.steps) {
     lines.push(`  ${step.id}. [${String(step.percent).padStart(3)}%] ${step.name}${updatedNote(step)}`);
   }
+  return lines;
+}
+
+const SKIP_REASONS = {
+  task: 'a task with this name already exists',
+  pending: 'this is already a pending suggestion',
+  dismissed: 'the user dismissed this suggestion before',
+};
+
+function suggestionLines(suggestion) {
+  const due = suggestion.due ? `due ${suggestion.due}` : 'no due date';
+  const origin = suggestion.source ? `${suggestion.by}: ${suggestion.source}` : suggestion.by;
+  const lines = [`#${suggestion.id}  ${due}  ${suggestion.name}  (${origin})`];
+  for (const step of suggestion.steps) lines.push(`      - ${step}`);
   return lines;
 }
 
@@ -167,6 +190,33 @@ function execute(command, args, options, env) {
       const task = findTask(load(), toId(args[0], 'task'));
       return options.json ? JSON.stringify(withProgress(task), null, 2) : showLines(task).join('\n');
     }
+    case 'suggest': {
+      expectCount(args, [1], 'task suggest <name> [--due <date>] [--step <name>]... [--source <text>]');
+      const result = update((data) => addSuggestion(data, {
+        name: args[0], due: options.due, steps: options.step ?? [], source: options.source, by,
+      }, new Date().toISOString()));
+      if (result.skipped) return `Skipped "${args[0].trim()}": ${SKIP_REASONS[result.skipped]}`;
+      return `Saved suggestion ${result.saved.id}: ${result.saved.name}`;
+    }
+    case 'suggestions': {
+      expectCount(args, [0], 'task suggestions [--json]');
+      const suggestions = pendingSuggestions(load());
+      if (options.json) return JSON.stringify({ suggestions }, null, 2);
+      if (suggestions.length === 0) return 'No suggestions.';
+      return suggestions.flatMap(suggestionLines).join('\n');
+    }
+    case 'accept': {
+      expectCount(args, [1], 'task accept <suggestion>');
+      const id = toId(args[0], 'suggestion');
+      const task = update((data) => acceptSuggestion(data, id, new Date().toISOString()));
+      return `Accepted suggestion ${id} as task ${task.id}: ${task.name}`;
+    }
+    case 'dismiss': {
+      expectCount(args, [1], 'task dismiss <suggestion>');
+      const id = toId(args[0], 'suggestion');
+      const suggestion = update((data) => dismissSuggestion(data, id));
+      return `Dismissed suggestion ${id}: ${suggestion.name}`;
+    }
     default:
       throw new TaskError(`unknown command "${command}". Available: ${COMMANDS.join(', ')}`);
   }
@@ -182,6 +232,8 @@ export function run(argv, { stdout, stderr, env }) {
         name: { type: 'string' },
         'no-due': { type: 'boolean' },
         by: { type: 'string' },
+        step: { type: 'string', multiple: true },
+        source: { type: 'string' },
         json: { type: 'boolean' },
         help: { type: 'boolean', short: 'h' },
       },
