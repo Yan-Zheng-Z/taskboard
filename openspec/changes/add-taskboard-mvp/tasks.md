@@ -42,8 +42,8 @@
 
 ## 5. 前端体检与修复
 
-- [ ] 5.1 用 `review-frontend-production` 的快速体检检查添加任务、展开步骤、修改进度三条路径，交付 `docs/quick-review.md`
-- [ ] 5.2 修复体检中发现的 P0 至 P2 问题，逐项复验并在 `docs/quick-review.md` 中记录结果；不修的项写明原因
+- [x] 5.1 用 `review-frontend-production` 的快速体检检查添加任务、展开步骤、修改进度三条路径，交付 `docs/quick-review.md`
+- [x] 5.2 修复体检中发现的 P0 至 P2 问题，逐项复验并在 `docs/quick-review.md` 中记录结果；不修的项写明原因
 
 ## 6. Agent 接入（agent-integration）
 

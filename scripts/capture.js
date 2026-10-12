@@ -1,14 +1,16 @@
 // Development helper: opens the widget, optionally runs some page script, saves a screenshot.
 //   npx electron scripts/capture.js <out.png> [script-file.js] [wait-ms]
-// The page script can be async; its return value is printed. Use TASKBOARD_HOME for sample data.
+// The page script can be async; its return value is printed. Use TASKBOARD_HOME for sample data
+// and TASKBOARD_THEME=light|dark to force a colour scheme.
 
-import { app } from 'electron';
+import { app, nativeTheme } from 'electron';
 import fs from 'node:fs';
 import { createWidgetWindow, connectWindow } from '../src/widget/window.js';
 
 const [outFile, scriptFile, waitMs = '400'] = process.argv.slice(2);
 
 app.whenReady().then(async () => {
+  if (process.env.TASKBOARD_THEME) nativeTheme.themeSource = process.env.TASKBOARD_THEME;
   const window = createWidgetWindow();
   const stop = connectWindow(window);
   window.webContents.on('console-message', (_event, _level, message) => console.log(`[page] ${message}`));

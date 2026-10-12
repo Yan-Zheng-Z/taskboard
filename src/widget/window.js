@@ -53,7 +53,14 @@ export function connectWindow(window) {
   ipcMain.handle('taskboard:read', () => readState());
   ipcMain.handle('taskboard:call', (_event, method, payload) => call(method, payload));
   ipcMain.on('taskboard:hide', () => window.hide());
-  return watchData(() => {
+  const push = () => {
     if (!window.isDestroyed()) window.webContents.send('taskboard:state', readState());
-  });
+  };
+  const stopWatching = watchData(push);
+  // "3 days left" goes stale at midnight even when the file never changes.
+  const clock = setInterval(push, 60_000);
+  return () => {
+    clearInterval(clock);
+    stopWatching();
+  };
 }

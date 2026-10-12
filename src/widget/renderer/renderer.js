@@ -31,10 +31,14 @@ function isOpen(kind, taskId, stepId) {
   return open !== null && open.kind === kind && open.taskId === taskId && open.stepId === stepId;
 }
 
-function setOpen(next, focusKey) {
+function focusKey(key) {
+  content.querySelector(`[data-key="${key}"]`)?.focus();
+}
+
+function setOpen(next, key) {
   open = next;
   render();
-  if (focusKey) content.querySelector(`[data-key="${focusKey}"]`)?.focus();
+  if (key) focusKey(key);
 }
 
 function showNotice(message) {
@@ -99,8 +103,15 @@ function taskForm({ key, task, submitLabel, onSubmit, onCancel }) {
     onkeydown: (event) => { if (event.key === 'Escape') onCancel(); },
   }, [
     el('input', { type: 'text', name: 'name', key: `${key}-name`, value: task?.name ?? '', placeholder: '任务名称', 'aria-label': '任务名称', required: true, maxlength: 200 }),
-    el('input', { type: 'date', name: 'date', key: `${key}-date`, value: date, 'aria-label': '截止日期（可不填）' }),
-    el('input', { type: 'time', name: 'time', key: `${key}-time`, value: time, 'aria-label': '截止时间（可不填）' }),
+    el('input', {
+      type: 'date',
+      name: 'date',
+      key: `${key}-date`,
+      value: date,
+      'aria-label': '截止日期（可不填）',
+      oninput: () => { form.elements.time.disabled = !form.elements.date.value; },
+    }),
+    el('input', { type: 'time', name: 'time', key: `${key}-time`, value: time, disabled: !date, 'aria-label': '截止时间（可不填，需先选日期）' }),
     el('button', { type: 'submit', class: 'btn primary', text: submitLabel }),
     button('取消', '', onCancel),
   ]);
@@ -112,13 +123,16 @@ function slider({ key, label, percent, onCommit, pct }) {
     type: 'range',
     min: 0,
     max: 100,
-    step: 5,
+    step: 1,
     value: percent,
     key,
     'aria-label': label,
     'aria-valuetext': `${percent}%`,
     onpointerdown: () => { dragging = true; },
-    oninput: (event) => { pct.textContent = `${event.target.value}%`; },
+    oninput: (event) => {
+      pct.textContent = `${event.target.value}%`;
+      event.target.setAttribute('aria-valuetext', `${event.target.value}%`);
+    },
     onchange: (event) => {
       dragging = false;
       pendingState = null; // the result of this commit is newer
@@ -127,11 +141,11 @@ function slider({ key, label, percent, onCommit, pct }) {
   });
 }
 
-function confirmRow(question, onConfirm) {
+function confirmRow(question, onConfirm, onCancel) {
   return el('div', { class: 'row' }, [
     el('span', { class: 'meta', text: question }),
-    button('删除', 'small danger', onConfirm, 'confirm-yes'),
-    button('取消', 'small', () => setOpen(null)),
+    button('删除', 'small danger', onConfirm),
+    button('取消', 'small', onCancel, 'confirm-no'),
   ]);
 }
 
@@ -173,13 +187,14 @@ function stepItem(task, step) {
     item.append(confirmRow(`删除步骤「${step.name}」？`, async () => {
       open = null;
       await act('removeStep', ids);
-    }));
+      focusKey(`task-${task.id}-head`);
+    }, () => setOpen(null, `${base}-rm`)));
   } else {
     item.append(el('div', { class: 'row' }, [
       el('span', { class: 'meta', text: updatedText(step) }),
       step.percent < 100 && button('完成', 'small', () => act('setStepProgress', { ...ids, percent: 100 }), `${base}-done`),
       button('改名', 'small', () => setOpen({ kind: 'rename-step', ...ids }, `${base}-name`), `${base}-rename`),
-      button('删除', 'small', () => setOpen({ kind: 'confirm-step', ...ids }, 'confirm-yes'), `${base}-rm`),
+      button('删除', 'small', () => setOpen({ kind: 'confirm-step', ...ids }, 'confirm-no'), `${base}-rm`),
     ]));
   }
   return item;
@@ -214,7 +229,7 @@ function taskBody(task) {
       if (!name) return;
       input.value = '';
       await act('addStep', { taskId: task.id, name });
-      content.querySelector(`[data-key="${base}-newstep"]`)?.focus();
+      focusKey(`${base}-newstep`);
     },
   }, [
     el('input', { type: 'text', name: 'name', key: `${base}-newstep`, placeholder: '添加步骤…', 'aria-label': `为「${task.name}」添加步骤`, maxlength: 200 }),
@@ -237,11 +252,12 @@ function taskBody(task) {
       open = null;
       expanded.delete(task.id);
       await act('removeTask', { taskId: task.id });
-    }));
+      document.getElementById('add-task').focus();
+    }, () => setOpen(null, `${base}-rm`)));
   } else {
     body.append(el('div', { class: 'row task-actions' }, [
       button('编辑', 'small', () => setOpen({ kind: 'edit-task', taskId: task.id }, `${base}-edit-name`), `${base}-editbtn`),
-      button('删除任务', 'small', () => setOpen({ kind: 'confirm-task', taskId: task.id }, 'confirm-yes'), `${base}-rm`),
+      button('删除任务', 'small', () => setOpen({ kind: 'confirm-task', taskId: task.id }, 'confirm-no'), `${base}-rm`),
     ]));
   }
   return body;
@@ -304,6 +320,7 @@ function snapshot() {
 function restore({ values, focusKey, selection, scrollTop }) {
   for (const input of content.querySelectorAll('input[data-key]:not([type="range"])')) {
     if (values.has(input.dataset.key)) input.value = values.get(input.dataset.key);
+    if (input.type === 'time') input.disabled = !input.form.elements.date.value;
   }
   content.scrollTop = scrollTop;
   if (!focusKey) return;
@@ -357,7 +374,7 @@ document.getElementById('add-task').addEventListener('click', openAddForm);
 document.getElementById('hide-window').addEventListener('click', () => api.hide());
 
 // A drag can end outside the slider without a change event.
-window.addEventListener('pointerup', () => {
+function endDrag() {
   if (!dragging) return;
   dragging = false;
   // Wait a tick: if this drag committed a value, its change event clears pendingState first.
@@ -367,7 +384,10 @@ window.addEventListener('pointerup', () => {
     pendingState = null;
     applyState(next);
   }, 0);
-});
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+window.addEventListener('blur', endDrag);
 
 api.onState(applyState);
 api.read().then(applyState);
