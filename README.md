@@ -19,7 +19,7 @@
 
 ### 安装
 
-需要 [Node.js](https://nodejs.org/) 22 或更高版本和 Git。
+需要 [Node.js](https://nodejs.org/) 22.12 或更高版本和 Git。
 
 ```
 git clone https://github.com/zyz122302-lang/taskboard.git
@@ -30,6 +30,8 @@ npm link
 
 `npm link` 会注册两个全局命令：`task`（命令行）和 `taskboard`（启动小窗口）。
 
+第一次运行 `taskboard` 时会先下载 Electron 运行程序（约 100 MB），期间终端里只有一行"Downloading Electron binary..."，窗口要等下载完才出现；之后启动就很快。
+
 ### 小窗口
 
 ```
@@ -38,6 +40,7 @@ taskboard
 
 - 窗口没有边框，始终在其他窗口上面；拖动顶部的标题栏移动它，位置会被记住。
 - 点任务展开步骤，同一时间只展开一个任务；拖滑块改进度，或点"完成"。
+- 任务前面的 `#3` 和步骤前面的数字就是命令行里用的编号。
 - 点右上角的向上箭头把窗口收成一条窄栏，只显示最近到期的未完成任务；再点一次恢复原来的大小。
 - 删除任务或步骤、忽略或采纳建议之后，窗口底部会出现几秒钟的"撤销"。
 - 点右上角的横线隐藏窗口，点系统托盘里的图标恢复。
@@ -54,7 +57,7 @@ task step add 1 "收集文献"                   # 给任务 1 加步骤，输�
 task progress 1 1 60                         # 任务 1 的步骤 1 设为 60%
 task done 1 1 --by claude                    # 标记完成，并注明是谁做的
 task progress 2 40                           # 没有步骤的任务可以直接设进度
-task list                                    # 所有任务
+task list                                    # 所有任务，标出已过期、今天到期或还剩几天
 task show 1                                  # 一个任务及其步骤
 task show 1 --json                           # 机器可读输出
 task edit 1 --name "新名字" --no-due         # 改名、去掉截止日期
@@ -64,6 +67,8 @@ task rm 1
 ```
 
 截止日期写成 `YYYY-MM-DD` 或 `"YYYY-MM-DD HH:mm"`（本地时间）；只写日期表示当天结束前。
+
+任务、步骤和建议的名称是单行文字，最多 200 个字符。
 
 `--by` 说明更新是谁做的。不写时取环境变量 `TASKBOARD_ACTOR`，再没有就记为 `user`。在窗口里做的修改记为 `user`。
 
@@ -139,7 +144,7 @@ First release. Tested on Windows 11 only. The code avoids Windows-only APIs, but
 
 ### Install
 
-Requires [Node.js](https://nodejs.org/) 22 or later and Git.
+Requires [Node.js](https://nodejs.org/) 22.12 or later and Git.
 
 ```
 git clone https://github.com/zyz122302-lang/taskboard.git
@@ -150,6 +155,8 @@ npm link
 
 `npm link` registers two global commands: `task` (the CLI) and `taskboard` (starts the window).
 
+The first time you run `taskboard` it downloads the Electron runtime (about 100 MB). The terminal shows only "Downloading Electron binary..." and the window appears when the download is done; later starts are quick.
+
 ### The window
 
 ```
@@ -158,6 +165,7 @@ taskboard
 
 - Frameless and always on top. Drag the title bar to move it; the position is remembered.
 - Click a task to see its steps; only one task is open at a time. Drag a slider to change progress, or click "完成" (done).
+- The `#3` in front of a task and the number in front of each step are the ids the command line uses.
 - The up arrow collapses the window to a strip showing only the next unfinished task; click it again to restore the previous size.
 - After you delete a task or step, or dismiss or accept a suggestion, an "撤销" (undo) bar appears at the bottom for a few seconds.
 - The dash hides the window; click the tray icon to bring it back.
@@ -174,7 +182,7 @@ task step add 1 "Collect references"          # add a step to task 1, prints the
 task progress 1 1 60                          # set step 1 of task 1 to 60%
 task done 1 1 --by claude                     # mark it done and say who did it
 task progress 2 40                            # a task without steps takes progress directly
-task list                                     # all tasks
+task list                                     # all tasks, marked overdue, due today or days left
 task show 1                                   # one task with its steps
 task show 1 --json                            # machine-readable
 task edit 1 --name "New name" --no-due        # rename, clear the due date
@@ -184,6 +192,8 @@ task rm 1
 ```
 
 Due dates are `YYYY-MM-DD` or `"YYYY-MM-DD HH:mm"` in local time. A date without a time means the end of that day.
+
+Names of tasks, steps and suggestions are a single line of at most 200 characters.
 
 `--by` records who made the update. Without it the CLI uses the `TASKBOARD_ACTOR` environment variable, then `user`. Changes made in the window are recorded as `user`.
 

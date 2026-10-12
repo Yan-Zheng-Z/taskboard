@@ -398,3 +398,7 @@ input[type="range"] {
 
 .step.finished .step-number { background: var(--done); color: var(--card); }
 .step.finished .name { color: var(--muted); }
+
+/* Task and step ids are the ones the command line and the agents use. */
+.task-id { margin-right: 6px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.step-number { min-width: 16px; width: auto; padding: 0 4px; border-radius: 8px; }

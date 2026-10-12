@@ -17,7 +17,7 @@ function el(tag, props = {}, children = []) {
   for (const [key, value] of Object.entries(props)) {
     if (key === 'class') node.className = value;
     else if (key === 'text') node.textContent = value;
-    else if (key === 'key') node.dataset.key = value;
+    else if (key === 'key') { if (value) node.dataset.key = value; }
     else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
     else if (value !== false && value !== null && value !== undefined) node.setAttribute(key, value === true ? '' : value);
   }
@@ -145,7 +145,7 @@ function taskForm({ key, task, submitLabel, onSubmit, onCancel }) {
     },
     onkeydown: (event) => { if (event.key === 'Escape') onCancel(); },
   }, [
-    el('input', { type: 'text', name: 'name', key: `${key}-name`, value: task?.name ?? '', placeholder: '任务名称', 'aria-label': '任务名称', required: true, maxlength: 200 }),
+    el('input', { type: 'text', name: 'name', key: `${key}-name`, value: task?.name ?? '', placeholder: '任务名称', 'aria-label': '任务名称', required: true, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
     el('input', {
       type: 'date',
       name: 'date',
@@ -192,7 +192,7 @@ function confirmRow(question, onConfirm, onCancel) {
   ]);
 }
 
-function stepItem(task, step, number) {
+function stepItem(task, step) {
   const ids = { taskId: task.id, stepId: step.id };
   const base = `step-${task.id}-${step.id}`;
   const pct = el('span', { class: 'pct', text: `${step.percent}%` });
@@ -207,7 +207,7 @@ function stepItem(task, step, number) {
       },
       onkeydown: (event) => { if (event.key === 'Escape') setOpen(null, `${base}-rename`); },
     }, [
-      el('input', { type: 'text', name: 'name', key: `${base}-name`, value: step.name, 'aria-label': '步骤名称', required: true, maxlength: 200 }),
+      el('input', { type: 'text', name: 'name', key: `${base}-name`, value: step.name, 'aria-label': '步骤名称', required: true, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
       el('button', { type: 'submit', class: 'btn small primary', text: '保存' }),
       button('取消', 'small', () => setOpen(null, `${base}-rename`)),
     ]);
@@ -217,7 +217,7 @@ function stepItem(task, step, number) {
 
   item.append(
     el('div', { class: 'step-top' }, [
-      el('span', { class: 'step-number', 'aria-hidden': 'true', text: step.percent === 100 ? '✓' : String(number) }),
+      el('span', { class: 'step-number', title: `步骤编号 ${step.id}`, text: String(step.id) }),
       el('span', { class: 'name', text: step.name }),
       pct,
     ]),
@@ -255,7 +255,7 @@ function taskBody(task) {
     const finished = task.steps.filter((step) => step.percent === 100).length;
     body.append(
       el('div', { class: 'steps-label', text: `步骤 · 已完成 ${finished} / ${task.steps.length}` }),
-      el('ol', { class: 'steps' }, task.steps.map((step, index) => stepItem(task, step, index + 1))),
+      el('ul', { class: 'steps' }, task.steps.map((step) => stepItem(task, step))),
     );
   } else {
     const pct = el('span', { class: 'pct', text: `${task.progress}%` });
@@ -283,7 +283,7 @@ function taskBody(task) {
       focusKey(`${base}-newstep`);
     },
   }, [
-    el('input', { type: 'text', name: 'name', key: `${base}-newstep`, placeholder: '添加步骤…', 'aria-label': `为「${task.name}」添加步骤`, maxlength: 200 }),
+    el('input', { type: 'text', name: 'name', key: `${base}-newstep`, placeholder: '添加步骤…', 'aria-label': `为「${task.name}」添加步骤`, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
     el('button', { type: 'submit', class: 'btn', text: '添加' }),
   ]);
   body.append(stepForm);
@@ -333,7 +333,10 @@ function taskCard(task) {
       content.querySelector(`[data-key="task-${task.id}-head"]`)?.scrollIntoView({ block: 'nearest' });
     },
   }, [
-    el('span', { class: 'name', text: task.name }),
+    el('span', { class: 'name' }, [
+      el('span', { class: 'task-id', title: `任务编号 ${task.id}`, text: `#${task.id}` }),
+      document.createTextNode(task.name),
+    ]),
     el('span', { class: 'pct', text: `${task.progress}%` }),
     el('span', { class: 'meter', 'aria-hidden': 'true' }, [fill]),
     el('span', { class: 'due', text: dueText(task) }),
@@ -502,7 +505,7 @@ function renderStrip(broken) {
     if (next) {
       percent = next.progress;
       parts.push(
-        el('span', { class: 'strip-name', text: next.name }),
+        el('span', { class: 'strip-name', text: `#${next.id} ${next.name}` }),
         el('span', { class: 'strip-pct', text: `${next.progress}%` }),
         el('span', { class: `strip-due ${next.state}`, text: remainingText(next) }),
       );
@@ -574,6 +577,20 @@ function render() {
   }
   content.replaceChildren(...nodes.filter(Boolean));
   restore(before);
+  followOpenTask();
+}
+
+// Finishing a task moves it to the end of the list; without this it would vanish
+// from under the user while still open.
+let lastOpen = { id: null, index: -1 };
+
+function followOpenTask() {
+  const [id] = expanded;
+  const index = state.status === 'ok' ? state.tasks.findIndex((task) => task.id === id) : -1;
+  if (id === lastOpen.id && index !== -1 && index !== lastOpen.index) {
+    content.querySelector(`[data-key="task-${id}-head"]`)?.scrollIntoView({ block: 'start' });
+  }
+  lastOpen = { id: id ?? null, index };
 }
 
 // ---- wiring ----

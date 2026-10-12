@@ -10,7 +10,7 @@ The user tracks their work in taskboard: tasks with due dates, each split into s
 ## Rules
 
 1. Use the `task` command only. Never read or edit the data file (`~/.taskboard/tasks.json`) directly.
-2. Sign every update with `--by deepseek`.
+2. Sign progress updates and suggestions with `--by deepseek`. Only those record who made them; adding, renaming and changing deadlines do not.
 3. Update progress only after the user has told you which task the current work belongs to, or when they ask you to organize their tasks (see below). Otherwise change nothing; you may ask once.
 4. Update a step only when it has really moved. Mark a step done only after you have verified the work (tests pass, the file exists, the command ran).
 5. Do not create, rename or delete tasks or steps unless the user asks. If your work does not match any existing step, say so instead of inventing one. Tasks you infer yourself go in as suggestions, never straight into the list (see below).
@@ -37,6 +37,26 @@ task done 3 2 --by deepseek            # step 2 of task 3 is finished
 task progress 3 2 60 --by deepseek     # step 2 of task 3 is about 60% done
 task progress 3 40 --by deepseek       # task 3 has no steps: set the task itself
 ```
+
+## Things users ask for
+
+**The task they named has no steps.** Do not invent steps. Ask once whether they want steps added (and which), or a percentage recorded on the task itself:
+
+```
+task progress 2 40 --by deepseek       # task 2 has no steps: about 40% done
+```
+
+**"Which task is most urgent?"** `task list` marks every task: `[overdue by 2 days]`, `[due today]`, `[3 days left]`, `[done]`. `task list --json` gives the same as `state` (`overdue`, `soon`, `normal`, `none`, `done`) and `days`. Use these instead of working out dates yourself.
+
+**Changing a name or a deadline.**
+
+```
+task edit 1 --due 2026-10-21          # or "2026-10-21 18:00"
+task edit 1 --name "New name"
+task edit 1 --no-due                  # remove the deadline
+```
+
+The numbers the user sees in the window (`#3` on a task, the number in front of each step) are the same ids these commands take. Every progress command prints the name of the step it changed: check that it is the one you meant.
 
 ## Adding a task the user asked for
 
