@@ -15,4 +15,4 @@
 
 ## 4. 收尾
 
-- [ ] 4.1 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，确认三个系统的自动测试通过
+- [x] 4.1 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，确认三个系统的自动测试通过

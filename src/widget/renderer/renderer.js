@@ -11,6 +11,8 @@ let page = 'tasks';
 const expanded = new Set();
 // Which inline form or confirmation is open: { kind, taskId?, stepId? } or null.
 let open = null;
+// What the settings page says after instructions were copied for another agent.
+let copyNote = '';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -514,16 +516,13 @@ function toggle(label, key, checked, onchange, { disabled = false, hint } = {}) 
   ]);
 }
 
-// What the settings page says after instructions were copied for another agent.
-let copyNote = '';
-
 async function copySkillFor(input) {
   const name = input.value.trim();
   if (!name) {
     copyNote = '';
     showNotice('请先填写这个 Agent 的署名，例如 codex');
     render();
-    input.focus();
+    focusKey('other-agent-name');
     return;
   }
   const result = await api.copySkill(name);
