@@ -10,6 +10,7 @@ import {
 import { load, update } from '../core/store.js';
 import { describeTask, activeTasks, allArchived } from '../core/view.js';
 import { buildDigest, agentHomes, AGENTS } from '../core/digest/index.js';
+import { loadSettings } from '../core/settings.js';
 
 const USAGE = `Usage: task <command> [arguments] [options]
 
@@ -40,10 +41,11 @@ Suggestions (proposed tasks that wait for the user to accept or dismiss)
   task dismiss <suggestion>                  Drop it; it will not be suggested again
 
 Conversations
-  task digest [--days <n>] [--agent <name>] [--json]
+  task digest [--days <n>] [--agent <name>|all] [--json]
                                              What you said to your coding agents lately,
                                              for an agent to turn into suggestions.
-                                             Reads local records only. Agents: claude, deepseek
+                                             Reads local records only. Agents: claude, deepseek.
+                                             Defaults come from the settings in the window.
 
 Options
   --due <date>   YYYY-MM-DD or "YYYY-MM-DD HH:mm" (local time)
@@ -168,16 +170,22 @@ function digestText(digest) {
   return out.join('\n');
 }
 
+// Without --days or --agent, reads what the user chose in the settings (by default 7 days, every agent).
 function digestCommand(options, env) {
-  const days = /^\d+$/.test(options.days ?? '7') ? Number(options.days ?? '7') : 0;
-  if (days < 1 || days > 365) throw new TaskError(`--days must be a number from 1 to 365, got "${options.days}"`);
-  const agent = options.agent ?? 'all';
-  if (agent !== 'all' && !AGENTS.includes(agent)) {
-    throw new TaskError(`unknown agent "${agent}". Available: ${AGENTS.join(', ')}, all`);
+  const settings = loadSettings();
+  let days = settings.digestDays;
+  if (options.days !== undefined) {
+    days = /^\d+$/.test(options.days) ? Number(options.days) : 0;
+    if (days < 1 || days > 365) throw new TaskError(`--days must be a number from 1 to 365, got "${options.days}"`);
   }
-  const digest = buildDigest({
-    ...agentHomes(env), days, agents: agent === 'all' ? AGENTS : [agent], now: Date.now(),
-  });
+  let agents = settings.digestAgents;
+  if (options.agent !== undefined) {
+    if (options.agent !== 'all' && !AGENTS.includes(options.agent)) {
+      throw new TaskError(`unknown agent "${options.agent}". Available: ${AGENTS.join(', ')}, all`);
+    }
+    agents = options.agent === 'all' ? AGENTS : [options.agent];
+  }
+  const digest = buildDigest({ ...agentHomes(env), days, agents, now: Date.now() });
   return options.json ? JSON.stringify(digest, null, 2) : digestText(digest);
 }
 

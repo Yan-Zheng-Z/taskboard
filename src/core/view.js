@@ -4,7 +4,7 @@ import { taskProgress } from './model.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SOON_DAYS = 3;
-// Finished tasks stay visible in the archive this long; after that they are only kept in the file.
+// Finished tasks stay visible in the archive this long unless the user chose otherwise; after that they are only kept in the file.
 export const ARCHIVE_DAYS = 7;
 
 function dueParts(due) {
@@ -52,9 +52,9 @@ export function activeTasks(tasks) {
   });
 }
 
-// Tasks finished within the last ARCHIVE_DAYS days, most recently finished first.
-export function recentArchive(tasks, now) {
-  const since = now - ARCHIVE_DAYS * DAY_MS;
+// Tasks finished within the last `days` days, most recently finished first.
+export function recentArchive(tasks, now, days = ARCHIVE_DAYS) {
+  const since = now - days * DAY_MS;
   return tasks
     .filter((task) => isArchived(task) && Date.parse(task.completedAt) >= since)
     .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt) || b.id - a.id);

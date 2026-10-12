@@ -1,9 +1,7 @@
 // The widget's own state: where its window was, and whether the one-time organize card
 // has been offered. Kept apart from the task data file.
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { dataDir } from '../core/store.js';
+import { readLocalState as readFile, writeLocalState as writeFile } from '../core/local-state.js';
 
 export const DEFAULT_SIZE = { width: 340, height: 520 };
 export const COMPACT_HEIGHT = 44;
@@ -11,7 +9,6 @@ const MARGIN = 24;
 // A window counts as visible only if at least this much of it is on a display.
 const MIN_VISIBLE = { width: 120, height: 80 };
 
-const stateFile = () => path.join(dataDir(), 'widget.json');
 
 function isBounds(value) {
   return value !== null && typeof value === 'object'
@@ -19,19 +16,6 @@ function isBounds(value) {
     && value.width > 0 && value.height > 0;
 }
 
-function readFile() {
-  try {
-    const stored = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
-    return stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeFile(changes) {
-  fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(stateFile(), `${JSON.stringify({ ...readFile(), ...changes }, null, 2)}\n`);
-}
 
 export function loadWidgetState() {
   const stored = readFile();

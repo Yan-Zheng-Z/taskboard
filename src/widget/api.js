@@ -8,6 +8,7 @@ import {
 } from '../core/model.js';
 import { load, update, dataFile } from '../core/store.js';
 import { describeTask, activeTasks, recentArchive } from '../core/view.js';
+import { loadSettings } from '../core/settings.js';
 
 const AUTHOR = 'user';
 
@@ -22,15 +23,17 @@ function toView(task, now) {
   };
 }
 
-// tasks: the open ones, most urgent first. archive: finished in the last week, latest first.
+// tasks: the open ones, most urgent first. archive: finished within the chosen number of days, latest first.
 export function readState(now = Date.now()) {
   try {
     const data = load();
+    const { archiveDays } = loadSettings();
     return {
       status: 'ok',
       file: dataFile(),
       tasks: activeTasks(data.tasks).map((task) => toView(task, now)),
-      archive: recentArchive(data.tasks, now).map((task) => toView(task, now)),
+      archiveDays,
+      archive: recentArchive(data.tasks, now, archiveDays).map((task) => toView(task, now)),
       suggestions: pendingSuggestions(data),
     };
   } catch (error) {
