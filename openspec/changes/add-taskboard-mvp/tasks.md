@@ -63,8 +63,8 @@
 ## 8. 整体验证
 
 - [x] 8.1 端到端验证：用命令行创建一个带三个步骤的任务，在本会话中以 "claude" 更新一步，在窗口中手动更新一步，验证命令行和窗口显示一致且署名正确
-- [ ] 8.2 运行全部测试和 lint，并对全部改动运行 `/code-review`，验证测试全部通过且审查发现的问题已处理或已说明
-- [ ] 8.3 运行 `openspec validate add-taskboard-mvp --strict`，验证通过
+- [x] 8.2 运行全部测试和 lint，并对全部改动运行 `/code-review`，验证测试全部通过且审查发现的问题已处理或已说明
+- [x] 8.3 运行 `openspec validate add-taskboard-mvp --strict`，验证通过
 
 ## Workflow follow-up
 

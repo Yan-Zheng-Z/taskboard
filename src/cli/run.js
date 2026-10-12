@@ -118,7 +118,8 @@ function stepCommand(args) {
 }
 
 function execute(command, args, options, env) {
-  const by = options.by ?? env.TASKBOARD_ACTOR ?? 'user';
+  // An empty TASKBOARD_ACTOR counts as unset; an explicitly empty --by is an error.
+  const by = options.by ?? (env.TASKBOARD_ACTOR || 'user');
   switch (command) {
     case 'add': {
       expectCount(args, [1], 'task add <name> [--due <date>]');

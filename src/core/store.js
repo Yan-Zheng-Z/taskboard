@@ -63,24 +63,48 @@ export function load() {
   }
 }
 
+// Removes a lock that was seen as stale, but only if it is still that same lock.
+// Two waiters can both decide the lock is stale; the rename lets exactly one of them
+// take it, and the mtime check puts back a fresh lock that was created in between.
+export function breakStaleLock(lockFile, staleMtimeMs) {
+  const aside = `${lockFile}.stale-${process.pid}`;
+  try {
+    fs.renameSync(lockFile, aside);
+  } catch {
+    return; // already taken over by another process, or gone
+  }
+  try {
+    if (fs.statSync(aside).mtimeMs !== staleMtimeMs) fs.linkSync(aside, lockFile);
+  } catch {
+    // a newer lock already exists at lockFile: leave it alone
+  }
+  fs.rmSync(aside, { force: true });
+}
+
 function acquireLock(lockFile, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    let failure;
     try {
       fs.closeSync(fs.openSync(lockFile, 'wx'));
       return;
     } catch (error) {
       if (error.code !== 'EEXIST' && !BUSY_CODES.has(error.code)) throw error;
+      failure = error;
     }
+    let lockedAt = null;
     try {
-      if (Date.now() - fs.statSync(lockFile).mtimeMs > LOCK_STALE_MS) {
-        fs.rmSync(lockFile, { force: true });
-        continue;
-      }
+      lockedAt = fs.statSync(lockFile).mtimeMs;
     } catch {
-      continue; // the lock vanished between the two calls: try again right away
+      // no lock file: it was just released, or it cannot be created here at all
+    }
+    if (lockedAt !== null && Date.now() - lockedAt > LOCK_STALE_MS) {
+      breakStaleLock(lockFile, lockedAt);
     }
     if (Date.now() >= deadline) {
+      if (lockedAt === null) {
+        throw new TaskError(`cannot create the lock file in ${path.dirname(lockFile)}: ${failure.message}`);
+      }
       throw new TaskError(`data is locked by another process (${lockFile}); try again`);
     }
     sleep(15 + Math.floor(Math.random() * 25));

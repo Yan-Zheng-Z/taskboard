@@ -266,3 +266,19 @@ test('the task executable exits non-zero on failure and writes the reason to std
   assert.match(bad.stderr, /task 42 does not exist/i);
   assert.equal(bad.stdout, '');
 });
+
+test('an empty TASKBOARD_ACTOR falls back to "user"', (t) => {
+  useTempHome(t);
+  task(['add', 'a']);
+  task(['step', 'add', '1', 's1']);
+  const result = task(['done', '1', '1'], { TASKBOARD_ACTOR: '' });
+  assert.equal(result.code, 0);
+  assert.equal(load().tasks[0].steps[0].updatedBy, 'user');
+});
+
+test('an explicitly empty --by is rejected', (t) => {
+  useTempHome(t);
+  task(['add', 'a']);
+  task(['step', 'add', '1', 's1']);
+  assert.notEqual(task(['done', '1', '1', '--by', '']).code, 0);
+});
