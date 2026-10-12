@@ -47,17 +47,17 @@
 
 ## 6. Agent 接入（agent-integration）
 
-- [ ] 6.1 编写 Claude Code 的接入说明模板放入 `integrations/claude/`，验证文件存在且内容符合 agent-integration 规格的署名和更新时机要求
-- [ ] 6.2 查阅 DeepSeek Harness 的文档和本机配置，确定 skill 的放置位置，把结论写入 `docs/agent-integration.md`
-- [ ] 6.3 编写 DeepSeek Harness 的 skill 模板放入 `integrations/dsh/`，验证文件存在且格式与 OpenSpec 生成的 `.dsh/skills/` 文件一致
-- [ ] 6.4 在 `docs/agent-integration.md` 中写明两个 Agent 的放置位置、复制命令、署名约定和放行 `task` 命令的方法，验证文档中的命令照抄都能运行
-- [ ] 6.5 在本机按文档安装两份模板（被安全检查拦截时由用户执行复制命令），验证新开的 Claude Code 会话在被告知"现在做任务 N"后会用 `task` 命令并以 "claude" 署名
+- [x] 6.1 编写 Claude Code 的接入说明模板（skill 文件）放入 `integrations/claude/`，验证文件存在且内容符合 agent-integration 规格的署名和更新时机要求
+- [x] 6.2 查阅 DeepSeek Harness 的文档和本机配置，确定 skill 的放置位置，把结论写入 `docs/agent-integration.md`
+- [x] 6.3 编写 DeepSeek Harness 的 skill 模板放入 `integrations/dsh/`，验证文件存在且格式与 OpenSpec 生成的 `.dsh/skills/` 文件一致
+- [x] 6.4 在 `docs/agent-integration.md` 中写明两个 Agent 的放置位置、复制命令、署名约定和放行 `task` 命令的方法，验证文档中的命令照抄都能运行
+- [x] 6.5 在本机按文档安装两份模板（被安全检查拦截时由用户执行复制命令），验证新开的 Claude Code 会话在被告知"现在做任务 N"后会用 `task` 命令并以 "claude" 署名
 
 ## 7. 开源发布准备
 
 - [x] 7.1 添加 MIT `LICENSE` 并在 `package.json` 中声明许可证、仓库地址和 Node 版本要求，验证字段齐全
 - [ ] 7.2 把 `README.md` 整理为面向外部用户的中英文说明：功能、截图、安装、命令用法、Agent 接入、平台支持范围、已知限制，验证在一个全新的克隆目录里照着安装步骤能跑起来
-- [ ] 7.3 添加 GitHub Actions 工作流，在 `windows-latest` 上运行测试和 lint，验证工作流文件语法正确（发布后以首次运行结果为准）
+- [x] 7.3 添加 GitHub Actions 工作流，在 `windows-latest` 上运行测试和 lint，验证工作流文件语法正确（发布后以首次运行结果为准）
 - [ ] 7.4 检查全部文件和提交记录中没有个人路径、个人邮箱和真实任务数据，验证搜索结果为空
 
 ## 8. 整体验证

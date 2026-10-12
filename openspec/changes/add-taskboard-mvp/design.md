@@ -84,7 +84,7 @@ Electron 的代价是下载约 100 多 MB、常驻内存较高，对一台开发
 
 ### 11. Agent 接入用"说明文字 + 命令行"，不写插件
 
-Claude Code 一侧是一段写入 `CLAUDE.md` 的说明文字。DeepSeek Harness 一侧以 skill 的形式提供：OpenSpec 初始化时已确认它会读取项目内的 `.dsh/skills/`。两者都作为模板放在仓库里，见决定 12。
+两侧都以 skill 文件的形式提供。Claude Code 读取 `~/.claude/skills/`；DeepSeek Harness 读取项目内的 `.dsh/skills/` 和全局的 `~/.dsh/skills/`（已从它的 `dsh-skill-filesystem` 包文档确认）。实现时把 Claude Code 一侧从最初设想的"写入全局 `CLAUDE.md`"改成了 skill：skill 只在相关时加载，不占用每个会话的上下文，也不需要改动用户已有的指令文件。两者都作为模板放在仓库里，见决定 12。
 
 - 备选为 DeepSeek Harness 写 Cordis 插件或接 MCP：功能更强，但它还在预览期并明确会有破坏性改动，"执行一条 shell 命令"最不容易被改坏。
 
@@ -109,6 +109,4 @@ Claude Code 一侧是一段写入 `CLAUDE.md` 的说明文字。DeepSeek Harness
 - [锁文件因进程崩溃而残留] → 超过 10 秒视为残留并接管。
 - [没有打包，开机自启依赖源码目录位置不变] → 文档中说明；移动目录后需要重新开启一次自启。
 
-## Open Questions
-
-- DeepSeek Harness 是否有全局（不限于单个项目）的 skill 或指令位置。这不影响规格和任务拆分：如果没有，就把 skill 放在需要用到它的各个项目的 `.dsh/skills/` 里，并在文档中说明。
+- [DeepSeek Harness 默认把命令限制在工作区内，而数据在用户主目录下，修改数据的 `task` 命令可能被沙箱拒绝] → skill 模板里说明申请更宽权限的做法，文档里说明需要批准一次；实际表现需要用户在它的界面里确认。

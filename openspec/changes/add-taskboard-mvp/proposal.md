@@ -33,4 +33,4 @@
 - 仓库中不得出现个人路径、个人邮箱或真实任务数据。
 - 新依赖：Electron（仅小窗口使用）；开发依赖 ESLint。命令行部分不引入第三方依赖。
 - 会在本机注册两个全局命令：`task` 和 `taskboard`（启动小窗口）。预检确认这两个名字目前没有被占用。
-- Agent 的指令文件以模板形式放在仓库的 `integrations/` 目录，由使用者自行复制到 Claude Code 的 `CLAUDE.md` 和 DeepSeek Harness 的 skill 位置。
+- Agent 的指令文件以模板形式放在仓库的 `integrations/` 目录，由使用者自行复制到 Claude Code 和 DeepSeek Harness 各自的 skill 目录。
