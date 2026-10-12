@@ -5,14 +5,14 @@
   "type": "module",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "bin": {
     "task": "src/cli/main.js",
     "taskboard": "src/widget/launch.js"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test \"test/*.test.js\"",
     "lint": "eslint .",
     "start": "node src/widget/launch.js",
     "prepare": "git config core.hooksPath .githooks || exit 0"
