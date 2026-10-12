@@ -209,3 +209,38 @@ export function dismissSuggestion(data, suggestionId) {
   data.dismissed = [...(data.dismissed ?? []), sameName(suggestion.name)].slice(-DISMISSED_LIMIT);
   return suggestion;
 }
+
+// ---- putting things back (undo) ----
+// Each of these reverses one removal and touches nothing else, so an undo never
+// overwrites what another writer changed in the meantime.
+
+export function restoreTask(data, task, index) {
+  if (data.tasks.some((existing) => existing.id === task.id)) throw new TaskError(`task ${task.id} already exists`);
+  data.tasks.splice(Math.min(index, data.tasks.length), 0, task);
+  return task;
+}
+
+export function restoreStep(data, taskId, step, index) {
+  const task = findTask(data, taskId);
+  if (task.steps.some((existing) => existing.id === step.id)) {
+    throw new TaskError(`step ${step.id} already exists in task ${taskId}`);
+  }
+  task.steps.splice(Math.min(index, task.steps.length), 0, step);
+  return step;
+}
+
+// forget: also drop the name from the dismissed list, for undoing a dismissal.
+export function restoreSuggestion(data, suggestion, index, { forget = false } = {}) {
+  const current = data.suggestions ?? [];
+  if (current.some((existing) => existing.id === suggestion.id)) {
+    throw new TaskError(`suggestion ${suggestion.id} already exists`);
+  }
+  data.suggestions = [...current.slice(0, index), suggestion, ...current.slice(index)];
+  if (forget) {
+    const dismissed = [...(data.dismissed ?? [])];
+    const at = dismissed.lastIndexOf(sameName(suggestion.name));
+    if (at !== -1) dismissed.splice(at, 1);
+    data.dismissed = dismissed;
+  }
+  return suggestion;
+}

@@ -3,7 +3,7 @@
 
 import {
   addTask, editTask, removeTask, addStep, renameStep, removeStep, setStepProgress, setTaskProgress,
-  pendingSuggestions, acceptSuggestion, dismissSuggestion,
+  pendingSuggestions, acceptSuggestion, dismissSuggestion, restoreTask, restoreStep, restoreSuggestion,
 } from '../core/model.js';
 import { load, update, dataFile } from '../core/store.js';
 import { describeTask, sortTasks } from '../core/view.js';
@@ -56,14 +56,66 @@ const actions = new Map(Object.entries({
   dismissSuggestion: (data, p) => dismissSuggestion(data, p.suggestionId),
 }));
 
-// Runs one named action. Always returns the current state so the window can redraw.
-export function call(method, payload) {
-  const action = actions.get(method);
-  if (!action) return { ok: false, error: `unknown action "${method}"`, state: readState() };
+// How to reverse the actions that remove something. Each builder runs before its action,
+// to note where the thing was, and gets the action's result to build the reversal.
+const reversals = new Map(Object.entries({
+  removeTask: (data, p) => {
+    const index = data.tasks.findIndex((task) => task.id === p.taskId);
+    return (removed) => (current) => restoreTask(current, removed, index);
+  },
+  removeStep: (data, p) => {
+    const steps = data.tasks.find((task) => task.id === p.taskId)?.steps ?? [];
+    const index = steps.findIndex((step) => step.id === p.stepId);
+    return (removed) => (current) => restoreStep(current, p.taskId, removed, index);
+  },
+  dismissSuggestion: (data, p) => {
+    const index = (data.suggestions ?? []).findIndex((suggestion) => suggestion.id === p.suggestionId);
+    return (removed) => (current) => restoreSuggestion(current, removed, index, { forget: true });
+  },
+  acceptSuggestion: (data, p) => {
+    const index = (data.suggestions ?? []).findIndex((suggestion) => suggestion.id === p.suggestionId);
+    const original = (data.suggestions ?? [])[index];
+    return (created) => (current) => {
+      removeTask(current, created.id);
+      restoreSuggestion(current, original, index);
+    };
+  },
+}));
+
+// The reversal of the most recent action, if it was one that can be undone. Kept only
+// for this window's own actions and only until the next one.
+let lastReversal = null;
+
+const failure = (message) => ({ ok: false, error: message, undoable: false, state: readState() });
+
+function undo() {
+  if (!lastReversal) return failure('nothing to undo');
+  const reversal = lastReversal;
+  lastReversal = null;
   try {
-    update((data) => action(data, payload ?? {}));
-    return { ok: true, state: readState() };
+    update(reversal);
+    return { ok: true, undoable: false, state: readState() };
   } catch (error) {
-    return { ok: false, error: error.message, state: readState() };
+    return failure(error.message);
+  }
+}
+
+// Runs one named action. Always returns the current state so the window can redraw.
+// `undoable` says whether call('undo') would now reverse it.
+export function call(method, payload) {
+  if (method === 'undo') return undo();
+  const action = actions.get(method);
+  if (!action) return failure(`unknown action "${method}"`);
+  const input = payload ?? {};
+  try {
+    const reversal = update((data) => {
+      const prepare = reversals.get(method)?.(data, input);
+      const result = action(data, input);
+      return prepare ? prepare(result) : null;
+    });
+    lastReversal = reversal;
+    return { ok: true, undoable: reversal !== null, state: readState() };
+  } catch (error) {
+    return failure(error.message); // a rejected action leaves the earlier chance to undo in place
   }
 }

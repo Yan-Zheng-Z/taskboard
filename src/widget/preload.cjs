@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('taskboard', {
   read: () => ipcRenderer.invoke('taskboard:read'),
   call: (method, payload) => ipcRenderer.invoke('taskboard:call', method, payload),
   hide: () => ipcRenderer.send('taskboard:hide'),
+  // true collapses the window to a strip, false restores it
+  setCompact: (compact) => ipcRenderer.send('taskboard:compact', compact),
   // action: 'open' | 'start' | 'later' | 'close' — the "organize from conversations" card
   organize: (action) => ipcRenderer.send('taskboard:organize', action),
   onState: (listener) => {

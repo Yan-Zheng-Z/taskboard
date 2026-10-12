@@ -46,9 +46,30 @@ function showNotice(message) {
   notice.hidden = !message;
 }
 
-async function act(method, payload) {
+// What the undo bar says after each action that can be reversed.
+const UNDO_TEXT = {
+  removeTask: '已删除任务',
+  removeStep: '已删除步骤',
+  dismissSuggestion: '已忽略建议',
+  acceptSuggestion: '已采纳建议',
+};
+const UNDO_SECONDS = 8;
+let undoTimer = null;
+
+function showUndo(text) {
+  const bar = document.getElementById('undo');
+  clearTimeout(undoTimer);
+  document.getElementById('undo-text').textContent = text ?? '';
+  bar.hidden = !text;
+  if (text) undoTimer = setTimeout(() => showUndo(null), UNDO_SECONDS * 1000);
+}
+
+// name: what was acted on, shown in the undo bar.
+async function act(method, payload, name) {
   const result = await api.call(method, payload);
   showNotice(result.ok ? '' : result.error);
+  // Any successful action replaces the previous chance to undo.
+  if (result.ok) showUndo(result.undoable ? `${UNDO_TEXT[method]}「${name}」` : null);
   applyState(result.state);
   return result.ok;
 }
@@ -76,6 +97,15 @@ function applyState(next) {
 }
 
 // ---- text helpers ----
+
+// Just the urgency, without the date: for the collapsed strip.
+function remainingText(task) {
+  if (task.state === 'none') return '无截止日期';
+  if (task.state === 'overdue') return task.days < 0 ? `已过期 ${-task.days} 天` : '已过期';
+  if (task.days === 0) return '今天截止';
+  if (task.days === 1) return '明天截止';
+  return `还剩 ${task.days} 天`;
+}
 
 function dueText(task) {
   if (task.state === 'done') return '已完成';
@@ -199,7 +229,7 @@ function stepItem(task, step) {
   if (isOpen('confirm-step', task.id, step.id)) {
     item.append(confirmRow(`删除步骤「${step.name}」？`, async () => {
       open = null;
-      await act('removeStep', ids);
+      await act('removeStep', ids, step.name);
       focusKey(`task-${task.id}-head`);
     }, () => setOpen(null, `${base}-rm`)));
   } else {
@@ -264,7 +294,7 @@ function taskBody(task) {
     body.append(confirmRow(`删除任务「${task.name}」及其全部步骤？`, async () => {
       open = null;
       expanded.delete(task.id);
-      await act('removeTask', { taskId: task.id });
+      await act('removeTask', { taskId: task.id }, task.name);
       document.getElementById('add-task').focus();
     }, () => setOpen(null, `${base}-rm`)));
   } else {
@@ -310,7 +340,7 @@ function suggestionItem(suggestion, index) {
   const settle = async (method) => {
     if (settling.has(suggestion.id)) return; // a second click while the first is being saved
     settling.add(suggestion.id);
-    await act(method, { suggestionId: suggestion.id });
+    await act(method, { suggestionId: suggestion.id }, suggestion.name);
     settling.delete(suggestion.id);
     if (next) focusKey(`sug-${next.id}-accept`);
     else document.getElementById('add-task').focus();
@@ -435,10 +465,54 @@ function restore({ values, focusKey, selection, scrollTop }) {
   if (selection && target.type === 'text') target.setSelectionRange(...selection);
 }
 
+// The collapsed window: one line about the next task that is not finished.
+function renderStrip(broken) {
+  const strip = document.getElementById('strip');
+  const fill = document.getElementById('strip-fill');
+  const parts = [];
+  let percent = 0;
+  if (broken) {
+    parts.push(el('span', { class: 'strip-name', text: '无法读取任务数据' }));
+  } else {
+    const next = state.tasks.find((task) => task.state !== 'done');
+    if (next) {
+      percent = next.progress;
+      parts.push(
+        el('span', { class: 'strip-name', text: next.name }),
+        el('span', { class: 'strip-pct', text: `${next.progress}%` }),
+        el('span', { class: `strip-due ${next.state}`, text: remainingText(next) }),
+      );
+    } else {
+      parts.push(el('span', { class: 'strip-name', text: '没有待办任务' }));
+    }
+    if (state.suggestions.length > 0) {
+      parts.push(el('span', { class: 'strip-due', text: `建议 ${state.suggestions.length}` }));
+    }
+  }
+  strip.replaceChildren(...parts);
+  fill.style.width = `${percent}%`;
+}
+
+function renderChrome(broken) {
+  const compact = state.compact === true;
+  document.body.classList.toggle('compact', compact);
+  document.querySelector('.bar h1').hidden = compact;
+  document.getElementById('strip').hidden = !compact;
+  document.getElementById('organize').hidden = compact;
+  document.getElementById('add-task').hidden = compact;
+  const toggle = document.getElementById('toggle-compact');
+  const label = compact ? '展开窗口' : '收起为窄栏';
+  toggle.classList.toggle('flipped', compact);
+  toggle.title = label;
+  toggle.setAttribute('aria-label', label);
+  if (compact) renderStrip(broken);
+}
+
 function render() {
   if (!state) return;
   const before = snapshot();
   const broken = state.status !== 'ok';
+  renderChrome(broken);
   document.getElementById('add-task').disabled = broken;
   document.getElementById('organize').disabled = broken || state.organize?.phase === 'running';
 
@@ -482,6 +556,8 @@ function render() {
 
 document.getElementById('add-task').addEventListener('click', openAddForm);
 document.getElementById('hide-window').addEventListener('click', () => api.hide());
+document.getElementById('toggle-compact').addEventListener('click', () => api.setCompact(!state?.compact));
+document.getElementById('undo-button').addEventListener('click', () => act('undo'));
 // Shows the organize card; nothing runs until the user confirms there.
 document.getElementById('organize').addEventListener('click', () => {
   api.organize('open');

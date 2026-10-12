@@ -38,7 +38,9 @@ taskboard
 
 - 窗口没有边框，始终在其他窗口上面；拖动顶部的标题栏移动它，位置会被记住。
 - 点任务展开步骤；拖滑块改进度，或点"完成"。
-- 点右上角的"—"隐藏窗口，点系统托盘里的图标恢复。
+- 点右上角的向上箭头把窗口收成一条窄栏，只显示最近到期的未完成任务；再点一次恢复原来的大小。
+- 删除任务或步骤、忽略或采纳建议之后，窗口底部会出现几秒钟的"撤销"。
+- 点右上角的横线隐藏窗口，点系统托盘里的图标恢复。
 - 右键托盘图标可以开关"开机自动启动"或退出。
 - 只用键盘也能操作：Tab 移动，空格或回车展开任务，方向键调整进度。
 
@@ -156,7 +158,9 @@ taskboard
 
 - Frameless and always on top. Drag the title bar to move it; the position is remembered.
 - Click a task to see its steps. Drag a slider to change progress, or click "完成" (done).
-- "—" hides the window; click the tray icon to bring it back.
+- The up arrow collapses the window to a strip showing only the next unfinished task; click it again to restore the previous size.
+- After you delete a task or step, or dismiss or accept a suggestion, an "撤销" (undo) bar appears at the bottom for a few seconds.
+- The dash hides the window; click the tray icon to bring it back.
 - Right-click the tray icon to toggle start-at-login or to quit.
 - Fully usable from the keyboard: Tab to move, Space or Enter to expand, arrow keys to adjust progress.
 

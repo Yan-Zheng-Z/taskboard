@@ -5,23 +5,38 @@ import { fileURLToPath } from 'node:url';
 import { readState, call } from './api.js';
 import { watchData } from './watch.js';
 import { createOrganizer, claudeLaunch, findClaude } from './organize.js';
-import { loadBounds, saveBounds, fitToDisplays } from './window-state.js';
+import {
+  COMPACT_HEIGHT, loadWidgetState, setCompact, windowBounds, rememberWindowBounds,
+} from './window-state.js';
 
 const here = (relative) => fileURLToPath(new URL(relative, import.meta.url));
+
+const MIN_WIDTH = 280;
+const MIN_HEIGHT = 200;
+
+// Collapses the window to a strip or restores it. The strip cannot be resized vertically.
+function applyCompact(window, compact) {
+  setCompact(compact);
+  const displays = screen.getAllDisplays().map((display) => display.workArea);
+  window.setMinimumSize(MIN_WIDTH, compact ? COMPACT_HEIGHT : MIN_HEIGHT);
+  window.setMaximumSize(0, compact ? COMPACT_HEIGHT : 0); // 0 means no limit
+  window.setBounds(windowBounds(displays));
+}
 
 export function createWidgetWindow({ show = true } = {}) {
   const displays = screen.getAllDisplays().map((display) => display.workArea);
   const window = new BrowserWindow({
-    ...fitToDisplays(loadBounds(), displays),
-    minWidth: 280,
-    minHeight: 200,
+    ...windowBounds(displays),
+    minWidth: MIN_WIDTH,
+    minHeight: loadWidgetState().compact ? COMPACT_HEIGHT : MIN_HEIGHT,
+    maxHeight: loadWidgetState().compact ? COMPACT_HEIGHT : undefined,
     show,
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     maximizable: false,
     fullscreenable: false,
-    backgroundColor: '#f6f7f9',
+    backgroundColor: '#f6f5f2',
     webPreferences: {
       preload: here('./preload.cjs'),
       contextIsolation: true,
@@ -38,7 +53,7 @@ export function createWidgetWindow({ show = true } = {}) {
   const rememberBounds = () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      if (!window.isDestroyed()) saveBounds(window.getBounds());
+      if (!window.isDestroyed()) rememberWindowBounds(window.getBounds());
     }, 400);
   };
   window.on('moved', rememberBounds);
@@ -54,7 +69,7 @@ export function createWidgetWindow({ show = true } = {}) {
 // user's Claude Code, or null when it is not installed.
 export function connectWindow(window, { launch = claudeLaunch(findClaude(process.env)) } = {}) {
   // Everything the page draws: the task data plus the state of the organize card.
-  const withOrganize = (state) => ({ ...state, organize: organizer.view(state) });
+  const withOrganize = (state) => ({ ...state, organize: organizer.view(state), compact: loadWidgetState().compact });
   const push = () => {
     if (!window.isDestroyed()) window.webContents.send('taskboard:state', withOrganize(readState()));
   };
@@ -66,6 +81,10 @@ export function connectWindow(window, { launch = claudeLaunch(findClaude(process
     return { ...result, state: withOrganize(result.state) };
   });
   ipcMain.on('taskboard:hide', () => window.hide());
+  ipcMain.on('taskboard:compact', (_event, compact) => {
+    applyCompact(window, compact === true);
+    push();
+  });
   ipcMain.on('taskboard:organize', (_event, action) => {
     if (action === 'open') organizer.open();
     else if (action === 'start') organizer.start();

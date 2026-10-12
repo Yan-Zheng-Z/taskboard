@@ -6,6 +6,7 @@ import path from 'node:path';
 import { dataDir } from '../core/store.js';
 
 export const DEFAULT_SIZE = { width: 340, height: 520 };
+export const COMPACT_HEIGHT = 44;
 const MARGIN = 24;
 // A window counts as visible only if at least this much of it is on a display.
 const MIN_VISIBLE = { width: 120, height: 80 };
@@ -33,7 +34,13 @@ function writeFile(changes) {
 }
 
 export function loadWidgetState() {
-  return { organizeOffered: readFile().organizeOffered === true };
+  const stored = readFile();
+  return { organizeOffered: stored.organizeOffered === true, compact: stored.compact === true };
+}
+
+// Compact: the window is collapsed to a strip that shows only the next task.
+export function setCompact(compact) {
+  writeFile({ compact });
 }
 
 export function markOrganizeOffered() {
@@ -70,4 +77,22 @@ export function fitToDisplays(bounds, displays) {
     y: first.y + MARGIN,
     ...DEFAULT_SIZE,
   };
+}
+
+// Where and how big the window should be right now. The saved bounds are always the
+// expanded ones; the strip borrows their position and width.
+export function windowBounds(displays) {
+  const expanded = fitToDisplays(loadBounds(), displays);
+  return loadWidgetState().compact ? { ...expanded, height: COMPACT_HEIGHT } : expanded;
+}
+
+// Called when the user moves or resizes the window. Moving the strip must not
+// replace the expanded height it will return to.
+export function rememberWindowBounds(bounds) {
+  if (!loadWidgetState().compact) {
+    saveBounds(bounds);
+    return;
+  }
+  const height = loadBounds()?.height ?? DEFAULT_SIZE.height;
+  saveBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height });
 }
