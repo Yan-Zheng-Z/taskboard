@@ -1,8 +1,12 @@
 // Creates the widget window. Shared by the app (main.js) and the screenshot script.
 
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } from 'electron';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readState, call } from './api.js';
+import { dataDir } from '../core/store.js';
+import { loadSettings, saveSetting } from '../core/settings.js';
+import { agentStatuses, installAgentSkill } from './agents.js';
 import { watchData } from './watch.js';
 import { createOrganizer, claudeLaunch, findClaude } from './organize.js';
 import {
@@ -10,6 +14,11 @@ import {
 } from './window-state.js';
 
 const here = (relative) => fileURLToPath(new URL(relative, import.meta.url));
+
+const packageInfo = JSON.parse(fs.readFileSync(here('../../package.json'), 'utf8'));
+const VERSION = packageInfo.version;
+// A fixed address: the page can ask to open it, but cannot choose what gets opened.
+const REPO_URL = 'https://github.com/zyz122302-lang/taskboard';
 
 const MIN_WIDTH = 280;
 const MIN_HEIGHT = 200;
@@ -70,13 +79,63 @@ export function createWidgetWindow({ show = true } = {}) {
 // Returns a function that stops watching.
 // `launch` says how to start the agent for the one-time organize run; the default is the
 // user's Claude Code, or null when it is not installed.
-export function connectWindow(window, { launch = claudeLaunch(findClaude(process.env)) } = {}) {
-  // Everything the page draws: the task data plus the state of the organize card.
-  const withOrganize = (state) => ({ ...state, organize: organizer.view(state), compact: loadWidgetState().compact });
+// `autostart` reads and changes start-at-login: { get(): boolean, set(boolean) }. The app passes
+// the real one; without it (the screenshot script) the switch does nothing.
+export function connectWindow(window, {
+  launch = claudeLaunch(findClaude(process.env)),
+  autostart = { get: () => false, set: () => {} },
+} = {}) {
+  // What the settings page shows besides the saved values.
+  const settingsView = () => ({
+    values: loadSettings(),
+    autostart: autostart.get(),
+    agents: agentStatuses(process.env),
+    dataDir: dataDir(),
+    version: VERSION,
+    repo: REPO_URL,
+  });
+  // Everything the page draws: the task data, the organize card and the settings.
+  const withOrganize = (state) => ({
+    ...state,
+    organize: organizer.view(state),
+    compact: loadWidgetState().compact,
+    settings: settingsView(),
+  });
   const push = () => {
     if (!window.isDestroyed()) window.webContents.send('taskboard:state', withOrganize(readState()));
   };
   const organizer = createOrganizer({ launch, env: process.env, onChange: push });
+
+  // Makes the window match the saved settings: colour scheme and staying on top.
+  const applySettings = () => {
+    const { theme, alwaysOnTop } = loadSettings();
+    nativeTheme.themeSource = theme;
+    // 'floating' keeps it above maximized and full-screen windows too.
+    window.setAlwaysOnTop(alwaysOnTop, 'floating');
+  };
+  applySettings();
+
+  // Each settings action answers { ok, error?, state } so the page can show what went wrong.
+  const answer = (action) => {
+    try {
+      action();
+      return { ok: true, state: withOrganize(readState()) };
+    } catch (error) {
+      return { ok: false, error: error.message, state: withOrganize(readState()) };
+    }
+  };
+  ipcMain.handle('taskboard:set-setting', (_event, key, value) => answer(() => {
+    saveSetting(key, value);
+    applySettings();
+  }));
+  ipcMain.handle('taskboard:set-autostart', (_event, enabled) => answer(() => autostart.set(enabled === true)));
+  // The only place that writes into an agent's directory, and only on this explicit request.
+  ipcMain.handle('taskboard:install-skill', (_event, id) => answer(() => installAgentSkill(id, process.env)));
+  ipcMain.on('taskboard:open-data-folder', () => {
+    fs.mkdirSync(dataDir(), { recursive: true });
+    shell.openPath(dataDir());
+  });
+  ipcMain.on('taskboard:open-repo', () => shell.openExternal(REPO_URL));
 
   ipcMain.handle('taskboard:read', () => withOrganize(readState()));
   ipcMain.handle('taskboard:call', (_event, method, payload) => {

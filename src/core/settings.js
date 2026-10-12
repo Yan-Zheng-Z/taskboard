@@ -43,7 +43,7 @@ export function saveSetting(key, value) {
   const clean = CLEANERS.get(key);
   if (!clean) throw new TaskError(`unknown setting "${key}"`);
   const cleaned = clean(value);
-  if (cleaned === undefined) throw new TaskError(`"${JSON.stringify(value)}" is not a valid value for the setting "${key}"`);
+  if (cleaned === undefined) throw new TaskError(`${JSON.stringify(value)} is not a valid value for the setting "${key}"`);
   const settings = { ...loadSettings(), [key]: cleaned };
   writeLocalState({ settings });
   return settings;

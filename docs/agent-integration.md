@@ -4,7 +4,11 @@
 
 taskboard 不给 Agent 写插件。Agent 通过执行 `task` 命令来勾选做完的步骤，所以任何能运行 shell 命令的 Agent 都能接入。这里提供 Claude Code 和 DeepSeek Harness 的现成模板，两者都是一个 skill 文件，告诉 Agent 什么时候、怎么调用 `task`。
 
-安装 taskboard 本身不会改动任何 Agent 的配置。下面的复制命令需要你自己执行。
+安装 taskboard 本身不会改动任何 Agent 的配置。
+
+**最简单的方法**：打开小窗口，点齿轮进入设置，在"Agent 接入"里对要用的 Agent 点"安装"。那里会显示每个 Agent 是否检测到、接入说明是未安装、已安装还是需要更新；taskboard 更新后回来点"更新"即可。只有点了按钮才会写入该 Agent 的目录。
+
+下面是手动复制的方法，效果相同。
 
 ## 约定
 
@@ -105,7 +109,7 @@ New-Item -ItemType Directory -Force "$HOME\.dsh\skills" | Out-Null; Copy-Item -R
 
 ## English summary
 
-Agents update taskboard by running the `task` command, so any agent that can run shell commands works. Templates are provided as one skill file per agent. Installing taskboard never changes agent configuration; copy the templates yourself.
+Agents update taskboard by running the `task` command, so any agent that can run shell commands works. Templates are provided as one skill file per agent. Installing taskboard never changes agent configuration. The easiest way to connect one is the "安装" (install) button next to it under "Agent 接入" in the window's settings, which also shows whether the skill is missing, installed or out of date. Copying by hand, below, does the same thing.
 
 - **Claude Code**: copy `integrations/claude/taskboard` into `~/.claude/skills/` (or a project's `.claude/skills/`). Allow the `task` command when asked, or add `"Bash(task:*)"` to `permissions.allow`. Updates are signed `claude`.
 - **DeepSeek Harness**: copy `integrations/dsh/taskboard` into `~/.dsh/skills/` (or a project's `.dsh/skills/`). Under the default `workspace-write` permissions, commands that change data may be denied by the sandbox the first time because the data lives in your home directory; approve the escalation prompt. This is based on the DeepSeek Harness package docs and has not been tested end to end. Updates are signed `deepseek`.

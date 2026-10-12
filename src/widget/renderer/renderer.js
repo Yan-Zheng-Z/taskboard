@@ -6,7 +6,7 @@ const content = document.getElementById('content');
 const notice = document.getElementById('notice');
 
 let state = null;
-// Which page is showing: the open tasks, or the tasks finished in the last week.
+// Which page is showing: 'tasks' (the open ones), 'archive' (recently finished) or 'settings'.
 let page = 'tasks';
 const expanded = new Set();
 // Which inline form or confirmation is open: { kind, taskId?, stepId? } or null.
@@ -468,14 +468,117 @@ function tasksPage() {
 
 // Tasks finished in the last week. Unticking a step, or adding one, sends a task back to the list.
 function archivePage() {
-  const nodes = [el('h2', { class: 'page-title', text: '最近 7 天完成的任务' })];
+  const days = state.archiveDays;
+  const nodes = [el('h2', { class: 'page-title', text: `最近 ${days} 天完成的任务` })];
   if (state.archive.length === 0) {
-    nodes.push(el('div', { class: 'panel' }, [el('p', { text: '最近 7 天没有完成的任务。' })]));
+    nodes.push(el('div', { class: 'panel' }, [el('p', { text: `最近 ${days} 天没有完成的任务。` })]));
   } else {
     nodes.push(...state.archive.map(taskCard));
   }
-  nodes.push(el('p', { class: 'hint page-note', text: '任务的所有步骤完成后自动归档。更早完成的任务仍保存着，可用 task list --archived 查看。' }));
+  nodes.push(el('p', { class: 'hint page-note', text: '任务的所有步骤完成后自动归档。更早完成的任务仍保存着，可用 task list --archived 查看；显示多少天可以在设置里改。' }));
   return nodes;
+}
+
+// ---- settings ----
+
+// Sends one change and redraws; a refused change shows why and keeps the old value.
+async function change(request) {
+  const result = await request;
+  showNotice(result.ok ? '' : result.error);
+  applyState(result.state);
+}
+
+// A row of mutually exclusive choices, e.g. the theme.
+function choices(label, key, options, current) {
+  return el('div', { class: 'setting', role: 'group', 'aria-label': label }, [
+    el('span', { class: 'setting-label', text: label }),
+    el('span', { class: 'segmented' }, options.map(([value, text]) => el('button', {
+      type: 'button',
+      class: `btn small${value === current ? ' chosen' : ''}`,
+      'aria-pressed': String(value === current),
+      key: `set-${key}-${value}`,
+      text,
+      onclick: () => change(api.setSetting(key, value)),
+    }))),
+  ]);
+}
+
+function toggle(label, key, checked, onchange, { disabled = false, hint } = {}) {
+  return el('label', { class: 'setting' }, [
+    el('span', { class: 'setting-label' }, [
+      document.createTextNode(label),
+      hint && el('span', { class: 'hint setting-hint', text: hint }),
+    ]),
+    el('input', { type: 'checkbox', class: 'step-check', key: `set-${key}`, checked, disabled, onchange: (event) => onchange(event.target.checked) }),
+  ]);
+}
+
+const SKILL_TEXT = { missing: '接入说明未安装', current: '接入说明已安装', outdated: '接入说明需要更新' };
+
+function agentRow(agent) {
+  return el('div', { class: 'setting' }, [
+    el('span', { class: 'setting-label' }, [
+      document.createTextNode(agent.name),
+      el('span', { class: 'hint setting-hint', text: `${agent.detected ? '已检测到' : '未检测到'} · ${SKILL_TEXT[agent.skill]}` }),
+    ]),
+    agent.skill === 'current'
+      ? el('span', { class: 'hint', text: '已是最新' })
+      : button(agent.skill === 'missing' ? '安装' : '更新', 'small primary', () => change(api.installSkill(agent.id)), `agent-${agent.id}-install`),
+  ]);
+}
+
+function settingsPage() {
+  const { values, autostart, agents, dataDir, version, repo } = state.settings;
+  const section = (title, rows) => el('section', { class: 'settings-section' }, [
+    el('h2', { class: 'page-title', text: title }),
+    el('div', { class: 'card-form settings-card' }, rows),
+  ]);
+  // "Organize" must read at least one agent's conversations: the last one ticked cannot be unticked.
+  const reads = (id) => values.digestAgents.includes(id);
+  const setReads = (id, on) => change(api.setSetting(
+    'digestAgents',
+    on ? [...values.digestAgents, id] : values.digestAgents.filter((agent) => agent !== id),
+  ));
+  const onlyOne = values.digestAgents.length === 1;
+
+  return [
+    section('外观', [
+      choices('主题', 'theme', [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']], values.theme),
+    ]),
+    section('窗口', [
+      toggle('始终置顶', 'alwaysOnTop', values.alwaysOnTop, (on) => change(api.setSetting('alwaysOnTop', on))),
+      toggle('开机自动启动', 'autostart', autostart, (on) => change(api.setAutostart(on))),
+      choices('归档显示', 'archiveDays', [[7, '7 天'], [14, '14 天'], [30, '30 天']], values.archiveDays),
+    ]),
+    section('Agent 接入', [
+      ...agents.map(agentRow),
+      el('p', { class: 'hint settings-note', text: '点“安装”会把 taskboard 的接入说明复制到该 Agent 自己的目录，它才知道怎么更新你的任务。不点就不会改动它的任何文件。' }),
+    ]),
+    section('整理', [
+      toggle('读取 Claude Code 的对话', 'reads-claude', reads('claude'), (on) => setReads('claude', on), { disabled: onlyOne && reads('claude') }),
+      toggle('读取 DeepSeek Harness 的对话', 'reads-deepseek', reads('deepseek'), (on) => setReads('deepseek', on), { disabled: onlyOne && reads('deepseek') }),
+      choices('读取最近', 'digestDays', [[3, '3 天'], [7, '7 天'], [14, '14 天']], values.digestDays),
+      el('p', { class: 'hint settings-note', text: '整理时，这些对话里你说过的话会发送给执行整理的 Agent 的模型服务商。窗口里的后台整理使用 Claude Code。' }),
+    ]),
+    section('数据', [
+      el('div', { class: 'setting' }, [
+        el('span', { class: 'setting-label' }, [
+          document.createTextNode('数据位置'),
+          el('span', { class: 'hint setting-hint path', text: dataDir }),
+        ]),
+        button('打开文件夹', 'small', () => api.openDataFolder(), 'open-data-folder'),
+      ]),
+    ]),
+    section('关于', [
+      el('div', { class: 'setting' }, [
+        el('span', { class: 'setting-label' }, [
+          document.createTextNode(`taskboard ${version}`),
+          el('span', { class: 'hint setting-hint path', text: repo }),
+        ]),
+        button('项目主页', 'small', () => api.openRepo(), 'open-repo'),
+      ]),
+    ]),
+  ];
 }
 
 // ---- render ----
@@ -539,17 +642,22 @@ function renderStrip(broken) {
 function renderChrome(broken) {
   const compact = state.compact === true;
   const archive = page === 'archive';
+  const settings = page === 'settings';
   document.body.classList.toggle('compact', compact);
   document.querySelector('.bar h1').hidden = compact;
-  document.querySelector('.bar h1').textContent = archive ? '归档' : '任务';
+  document.querySelector('.bar h1').textContent = { tasks: '任务', archive: '归档', settings: '设置' }[page];
   document.getElementById('strip').hidden = !compact;
-  for (const id of ['toggle-archive', 'organize', 'add-task']) document.getElementById(id).hidden = compact;
+  for (const id of ['toggle-archive', 'organize', 'add-task', 'toggle-settings']) document.getElementById(id).hidden = compact;
+  const settingsButton = document.getElementById('toggle-settings');
+  settingsButton.setAttribute('aria-pressed', String(settings));
+  settingsButton.title = settings ? '返回任务' : '设置';
+  settingsButton.setAttribute('aria-label', settingsButton.title);
   document.getElementById('add-task').disabled = broken;
   document.getElementById('organize').disabled = broken || state.organize?.phase === 'running';
   const archiveButton = document.getElementById('toggle-archive');
   archiveButton.disabled = broken;
   archiveButton.textContent = archive ? '返回任务' : '归档';
-  archiveButton.title = archive ? '返回未完成的任务' : '最近 7 天完成的任务';
+  archiveButton.title = archive ? '返回未完成的任务' : '最近完成的任务';
   const toggle = document.getElementById('toggle-compact');
   const label = compact ? '展开窗口' : '收起为窄栏';
   toggle.classList.toggle('flipped', compact);
@@ -565,7 +673,7 @@ function render() {
   renderChrome(broken);
   let nodes;
   if (broken) nodes = [errorPanel()];
-  else nodes = page === 'archive' ? archivePage() : tasksPage();
+  else nodes = { tasks: tasksPage, archive: archivePage, settings: settingsPage }[page]();
   content.replaceChildren(...nodes.filter(Boolean));
   restore(before);
 }
@@ -576,6 +684,7 @@ document.getElementById('add-task').addEventListener('click', openAddForm);
 document.getElementById('hide-window').addEventListener('click', () => api.hide());
 document.getElementById('toggle-compact').addEventListener('click', () => api.setCompact(!state?.compact));
 document.getElementById('toggle-archive').addEventListener('click', () => showPage(page === 'archive' ? 'tasks' : 'archive'));
+document.getElementById('toggle-settings').addEventListener('click', () => showPage(page === 'settings' ? 'tasks' : 'settings'));
 document.getElementById('undo-button').addEventListener('click', () => act('undo'));
 // Shows the organize card; nothing runs until the user confirms there.
 document.getElementById('organize').addEventListener('click', () => {

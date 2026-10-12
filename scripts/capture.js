@@ -10,7 +10,6 @@ import { createWidgetWindow, connectWindow } from '../src/widget/window.js';
 const [outFile, scriptFile, waitMs = '400'] = process.argv.slice(2);
 
 app.whenReady().then(async () => {
-  if (process.env.TASKBOARD_THEME) nativeTheme.themeSource = process.env.TASKBOARD_THEME;
   const window = createWidgetWindow();
   // TASKBOARD_CAPTURE_AGENT="<script> <mode>" runs that script with Node in place of Claude Code;
   // TASKBOARD_CAPTURE_AGENT=none pretends no agent is installed.
@@ -19,6 +18,7 @@ app.whenReady().then(async () => {
   if (stand === 'none') options.launch = null;
   else if (stand) options.launch = { command: process.execPath, args: stand.split(' '), env: { ELECTRON_RUN_AS_NODE: '1' } };
   const stop = connectWindow(window, options);
+  if (process.env.TASKBOARD_THEME) nativeTheme.themeSource = process.env.TASKBOARD_THEME;
   window.webContents.on('console-message', (_event, _level, message) => console.log(`[page] ${message}`));
   await new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
   await new Promise((resolve) => setTimeout(resolve, 300));

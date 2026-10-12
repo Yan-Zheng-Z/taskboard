@@ -41,8 +41,6 @@ function buildTrayMenu() {
 
 function start() {
   window = createWidgetWindow();
-  // Stay above full-screen and maximized windows too.
-  window.setAlwaysOnTop(true, 'floating');
   keepAliveOnClose(window);
 
   tray = new Tray(nativeImage.createFromPath(iconFile).resize({ width: 16, height: 16 }));
@@ -50,7 +48,15 @@ function start() {
   tray.setContextMenu(buildTrayMenu());
   tray.on('click', toggleWindow);
 
-  app.on('will-quit', connectWindow(window));
+  // Start-at-login can be switched from the tray menu and from the settings page; keep them in step.
+  const autostart = {
+    get: () => app.getLoginItemSettings(loginItem()).openAtLogin,
+    set: (enabled) => {
+      app.setLoginItemSettings({ ...loginItem(), openAtLogin: enabled });
+      tray.setContextMenu(buildTrayMenu());
+    },
+  };
+  app.on('will-quit', connectWindow(window, { autostart }));
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -43,12 +43,13 @@ taskboard
 - 点任务展开步骤，同一时间只展开一个任务；勾选步骤前面的方框表示做完，取消勾选表示还没做完。
 - 任务前面的 `#3` 和步骤前面的数字就是命令行里用的编号。
 - 点"＋"添加任务，需要填任务名称和第一个步骤，之后可以再加步骤。
-- 任务的所有步骤都勾上后，它自动归档并离开列表。点标题栏的"归档"查看最近 7 天完成的任务；在那里取消勾选某一步或加一个新步骤，任务就回到列表。
+- 任务的所有步骤都勾上后，它自动归档并离开列表。点标题栏的"归档"查看最近完成的任务（默认 7 天，可在设置里改）；在那里取消勾选某一步或加一个新步骤，任务就回到列表。
 - "删除任务"只用于任务取消或建错了；做完的任务不需要删除。
+- 点齿轮进入设置：主题（跟随系统、浅色、深色）、始终置顶、开机自动启动、归档显示 7 / 14 / 30 天、整理时读取哪些对话和最近几天、为 Agent 安装接入说明、数据文件位置。改动立即生效。
 - 点右上角的向上箭头把窗口收成一条窄栏，只显示最近到期的任务；再点一次恢复原来的大小。
 - 删除任务或步骤、忽略或采纳建议、勾完最后一步使任务归档之后，窗口底部会出现几秒钟的"撤销"。
 - 点右上角的横线隐藏窗口，点系统托盘里的图标恢复。
-- 右键托盘图标可以开关"开机自动启动"或退出。
+- 右键托盘图标可以开关"开机自动启动"或退出；这个开关在设置里也有。
 - 只用键盘也能操作：Tab 移动，空格或回车展开任务，空格勾选步骤。
 
 开机自启记录的是源码目录的位置，移动目录后需要重新开启一次。
@@ -103,21 +104,21 @@ task digest --days 3 --agent claude
 
 第一次启动小窗口且列表为空时，会出现一张卡片，点"开始整理"后由本机的 Claude Code 在后台做一次同样的事。这张卡片只自动出现一次；之后随时可以点标题栏的"整理"按钮再整理一遍，确认后才会运行。
 
-**隐私**：摘要里是你在对话中说过的话。Agent 读取它时，这些内容会发送给该 Agent 背后的模型服务商；默认两个来源都读，所以一家服务商会看到你和另一个 Agent 的对话摘要。用 `--agent` 可以只读一个来源。你在对话里粘贴过的敏感内容也可能出现在摘要里。
+**隐私**：摘要里是你在对话中说过的话。Agent 读取它时，这些内容会发送给该 Agent 背后的模型服务商；默认两个来源都读，所以一家服务商会看到你和另一个 Agent 的对话摘要。在设置的"整理"里可以关掉其中一个来源，或用 `--agent` 只读一个来源；`task digest` 不带参数时用的就是设置里的来源和天数。你在对话里粘贴过的敏感内容也可能出现在摘要里。
 
 两个 Agent 的对话记录格式都不是公开接口，它们升级后可能读不出来；读不出的记录会被跳过并在输出末尾说明。
 
 ### 让 Agent 更新任务
 
-安装 taskboard 不会改动你的任何 Agent 配置。接入方法见 [docs/agent-integration.md](docs/agent-integration.md)，模板在 [integrations/](integrations/)。
+安装 taskboard 不会改动你的任何 Agent 配置。最简单的接入方法是在小窗口的设置里，对要用的 Agent 点"安装"；手动复制的方法和各项约定见 [docs/agent-integration.md](docs/agent-integration.md)，模板在 [integrations/](integrations/)。
 
 **不要把 taskboard 的安装目录选作 DeepSeek Harness 的工作区。** 它的沙箱会修改工作区文件夹的访问权限，导致目录里的 Electron 无法启动，小窗口打不开。恢复方法见接入文档。
 
 ### 数据
 
-数据在用户主目录下的 `.taskboard/tasks.json`（Windows 上是 `C:\Users\<你>\.taskboard\`）。设置环境变量 `TASKBOARD_HOME` 可以换位置。同一目录下的 `widget.json` 只记录窗口自己的状态。
+数据在用户主目录下的 `.taskboard/tasks.json`（Windows 上是 `C:\Users\<你>\.taskboard\`）。设置环境变量 `TASKBOARD_HOME` 可以换位置。同一目录下的 `widget.json` 记录窗口位置和你的设置。
 
-归档的任务一直保存在这个文件里，窗口只显示最近 7 天的，更早的用 `task list --archived` 查看。一个任务大约占 1 KB。
+归档的任务一直保存在这个文件里，窗口只显示最近一段时间的（默认 7 天），更早的用 `task list --archived` 查看。一个任务大约占 1 KB。
 
 从使用百分比进度的旧版本升级时，数据会自动转换：进度 100% 的步骤算完成，其余算未完成；没有步骤的任务得到一个同名步骤。第一次保存前，旧文件会备份为同目录下的 `tasks.v1.backup.json`。
 
@@ -179,12 +180,13 @@ taskboard
 - Click a task to see its steps; only one task is open at a time. Tick the box in front of a step when it is finished; untick it if it was not.
 - The `#3` in front of a task and the number in front of each step are the ids the command line uses.
 - "＋" adds a task. It asks for a name and a first step; more steps can be added afterwards.
-- When every step is ticked, the task is archived and leaves the list. "归档" (archive) in the title bar shows the tasks finished in the last 7 days; unticking a step there, or adding one, sends the task back to the list.
+- When every step is ticked, the task is archived and leaves the list. "归档" (archive) in the title bar shows recently finished tasks (7 days by default; change it in the settings); unticking a step there, or adding one, sends the task back to the list.
 - "删除任务" (delete task) is for tasks that were cancelled or added by mistake. Finished tasks do not need deleting.
+- The gear opens the settings: theme (follow the system, light, dark), always on top, start at login, how many days the archive shows (7 / 14 / 30), which conversations "organize" reads and how far back, installing the skill for an agent, and where the data is. Changes apply at once.
 - The up arrow collapses the window to a strip showing only the next task; click it again to restore the previous size.
 - After you delete a task or step, dismiss or accept a suggestion, or tick the last step so that a task is archived, an "撤销" (undo) bar appears at the bottom for a few seconds.
 - The dash hides the window; click the tray icon to bring it back.
-- Right-click the tray icon to toggle start-at-login or to quit.
+- Right-click the tray icon to toggle start-at-login or to quit; the same switch is in the settings.
 - Fully usable from the keyboard: Tab to move, Space or Enter to expand a task, Space to tick a step.
 
 Start-at-login stores the location of the source directory. Turn it on again if you move the directory.
@@ -239,21 +241,21 @@ task digest --days 3 --agent claude
 
 The first time the window starts with an empty list, it shows a card offering to do this once in the background with your local Claude Code. The card appears on its own only once; after that the "整理" (organize) button in the title bar brings it back whenever you want another pass, and nothing runs until you confirm.
 
-**Privacy**: the digest contains things you said in your conversations. When an agent reads it, that text goes to the agent's model provider. Both sources are read by default, so one provider sees a digest of your conversations with the other agent; use `--agent` to read only one. Sensitive text you pasted into a conversation can appear in the digest.
+**Privacy**: the digest contains things you said in your conversations. When an agent reads it, that text goes to the agent's model provider. Both sources are read by default, so one provider sees a digest of your conversations with the other agent; turn one source off under "整理" (organize) in the settings, or use `--agent` to read only one. Without options, `task digest` uses the sources and days from the settings. Sensitive text you pasted into a conversation can appear in the digest.
 
 Neither agent's record format is a published interface, so an update may make records unreadable. Unreadable records are skipped and reported at the end of the output.
 
 ### Letting agents update tasks
 
-Installing taskboard does not change any agent configuration. See [docs/agent-integration.md](docs/agent-integration.md); the templates are in [integrations/](integrations/).
+Installing taskboard does not change any agent configuration. The easiest way to connect an agent is the "安装" (install) button next to it in the window's settings. For copying by hand and for the conventions, see [docs/agent-integration.md](docs/agent-integration.md); the templates are in [integrations/](integrations/).
 
 **Do not pick the taskboard install directory as a DeepSeek Harness workspace.** Its sandbox changes the access permissions of the workspace folder, which stops the Electron runtime inside it from starting, so the window will not open. The integration doc explains how to recover.
 
 ### Data
 
-Data lives in `.taskboard/tasks.json` in your home directory. Set `TASKBOARD_HOME` to use another location. `widget.json` next to it only stores the window's own state.
+Data lives in `.taskboard/tasks.json` in your home directory. Set `TASKBOARD_HOME` to use another location. `widget.json` next to it stores the window position and your settings.
 
-Archived tasks stay in that file. The window shows the last 7 days; `task list --archived` shows all of them. A task takes about 1 KB.
+Archived tasks stay in that file. The window shows the most recent ones (7 days by default); `task list --archived` shows all of them. A task takes about 1 KB.
 
 When upgrading from the earlier version that used percentages, the data is converted automatically: steps at 100% become done and all others not done, and a task without steps gets one step named after it. Before the first save, the old file is copied to `tasks.v1.backup.json` in the same directory.
 
