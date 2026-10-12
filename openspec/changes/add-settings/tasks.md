@@ -20,4 +20,4 @@
 
 - [x] 4.1 更新 README 和接入文档，验证说明与实际一致
 - [x] 4.2 用 `review-frontend-production` 快速体检设置页，结果追加到 `docs/quick-review.md`，修复 P0 至 P2 问题
-- [ ] 4.3 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过
+- [x] 4.3 运行全部测试、lint、`/code-review` 和 `openspec validate --strict`，处理发现的问题，验证全部通过

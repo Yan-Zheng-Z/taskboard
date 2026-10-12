@@ -9,6 +9,8 @@ const iconFile = fileURLToPath(new URL('../../assets/icon.png', import.meta.url)
 
 let window = null;
 let tray = null;
+// Redraws the page; set once the window is connected.
+let refreshPage = () => {};
 
 function toggleWindow() {
   if (window.isVisible()) {
@@ -32,6 +34,7 @@ function buildTrayMenu() {
       click: (item) => {
         app.setLoginItemSettings({ ...loginItem(), openAtLogin: item.checked });
         tray.setContextMenu(buildTrayMenu());
+        refreshPage(); // the settings page shows the same switch
       },
     },
     { type: 'separator' },
@@ -56,7 +59,9 @@ function start() {
       tray.setContextMenu(buildTrayMenu());
     },
   };
-  app.on('will-quit', connectWindow(window, { autostart }));
+  const stop = connectWindow(window, { autostart });
+  refreshPage = stop.refresh;
+  app.on('will-quit', stop);
 }
 
 if (!app.requestSingleInstanceLock()) {

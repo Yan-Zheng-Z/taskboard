@@ -143,9 +143,11 @@ test('agents that are not on this machine are reported as not detected, with no 
   ]);
 });
 
-test('an agent whose home directory exists is detected', (t) => {
+test('an agent whose home directory is in use is detected; an empty one is not', (t) => {
   const { env, homes } = agentEnv(t);
   fs.mkdirSync(homes.claudeHome, { recursive: true });
+  assert.deepEqual(agentStatuses(env).map((a) => a.detected), [false, false]);
+  fs.mkdirSync(path.join(homes.claudeHome, 'projects'));
   assert.deepEqual(agentStatuses(env).map((a) => a.detected), [true, false]);
 });
 
@@ -190,4 +192,37 @@ test('installing for an unknown agent, or where it cannot write, fails with a re
   fs.mkdirSync(homes.claudeHome, { recursive: true });
   fs.writeFileSync(path.join(homes.claudeHome, 'skills'), 'not a directory');
   assert.throws(() => installAgentSkill('claude', env), (error) => error instanceof TaskError && error.message.includes('Claude Code'));
+});
+
+// ---- found in code review ----
+
+test('installing for an agent that is not on this machine does not make it look detected', (t) => {
+  const { env } = agentEnv(t);
+  installAgentSkill('deepseek', env);
+  const [, deepseek] = agentStatuses(env);
+  assert.deepEqual([deepseek.detected, deepseek.skill], [false, 'current']);
+});
+
+test('an agent home with other content than our skill is detected', (t) => {
+  const { env, homes } = agentEnv(t);
+  installAgentSkill('deepseek', env);
+  fs.mkdirSync(path.join(homes.dshHome, 'sessions'));
+  assert.equal(agentStatuses(env)[1].detected, true);
+  installAgentSkill('claude', env);
+  fs.mkdirSync(path.join(homes.claudeHome, 'skills', 'another-skill'));
+  assert.equal(agentStatuses(env)[0].detected, true);
+});
+
+test('a missing template does not break the status; installing then fails with a reason', (t) => {
+  const { env } = agentEnv(t);
+  installAgentSkill('claude', env);
+  const real = fs.readFileSync;
+  t.mock.method(fs, 'readFileSync', (file, ...rest) => {
+    if (String(file).includes(path.join('integrations', 'claude'))) throw Object.assign(new Error('no such file'), { code: 'ENOENT' });
+    return real(file, ...rest);
+  });
+  t.mock.method(fs, 'copyFileSync', () => { throw Object.assign(new Error('no such file'), { code: 'ENOENT' }); });
+  assert.doesNotThrow(() => agentStatuses(env));
+  assert.equal(agentStatuses(env)[0].skill, 'current');
+  assert.throws(() => installAgentSkill('claude', env), TaskError);
 });

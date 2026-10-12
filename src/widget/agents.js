@@ -28,18 +28,35 @@ function readIfPresent(file) {
   }
 }
 
+function entries(dir) {
+  try {
+    return fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+// The agent's home counts as a sign of the agent only if it holds something besides the
+// skill taskboard itself put there: installing for an absent agent must not make it "detected".
+function hasOwnContent(home) {
+  return entries(home).some((name) => name !== 'skills')
+    || entries(path.join(home, 'skills')).some((name) => name !== 'taskboard');
+}
+
 function statusOf(agent, env) {
   const home = agent.home(agentHomes(env));
   const installed = readIfPresent(skillFile(home));
+  // Without the template there is nothing to compare against: do not claim an update is needed.
+  const current = readIfPresent(agent.templateFile);
   let skill = 'missing';
   if (installed !== null) {
-    skill = normalized(installed) === normalized(fs.readFileSync(agent.templateFile, 'utf8')) ? 'current' : 'outdated';
+    skill = current === null || normalized(installed) === normalized(current) ? 'current' : 'outdated';
   }
   return {
     id: agent.id,
     name: agent.name,
-    // On this machine if its command is on PATH or it has a home directory.
-    detected: Boolean(agent.hasCli(env)) || fs.existsSync(home),
+    // On this machine if its command is on PATH or its home directory is in use.
+    detected: Boolean(agent.hasCli(env)) || hasOwnContent(home),
     skill, // 'missing' | 'current' | 'outdated'
     target: skillFile(home),
   };

@@ -76,7 +76,7 @@ export function createWidgetWindow({ show = true } = {}) {
 }
 
 // Answers the page's requests and pushes fresh state when the data file changes.
-// Returns a function that stops watching.
+// Returns a function that stops watching; its `refresh` property redraws the page on request.
 // `launch` says how to start the agent for the one-time organize run; the default is the
 // user's Claude Code, or null when it is not installed.
 // `autostart` reads and changes start-at-login: { get(): boolean, set(boolean) }. The app passes
@@ -156,11 +156,14 @@ export function connectWindow(window, {
   const stopWatching = watchData(push);
   // "3 days left" goes stale at midnight even when the file never changes.
   const clock = setInterval(push, 60_000);
-  return () => {
+  const stop = () => {
     clearInterval(clock);
     stopWatching();
     organizer.cancel();
   };
+  // For changes made outside the page that it shows, such as start-at-login from the tray menu.
+  stop.refresh = push;
+  return stop;
 }
 
 // Alt+F4 on the frameless window should hide it, like the "—" button, not destroy it:
