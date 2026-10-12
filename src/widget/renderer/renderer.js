@@ -6,8 +6,8 @@ const content = document.getElementById('content');
 const notice = document.getElementById('notice');
 
 let state = null;
-let pendingState = null; // a refresh that arrived while a slider was being dragged
-let dragging = false;
+// Which page is showing: the open tasks, or the tasks finished in the last week.
+let page = 'tasks';
 const expanded = new Set();
 // Which inline form or confirmation is open: { kind, taskId?, stepId? } or null.
 let open = null;
@@ -26,6 +26,9 @@ function el(tag, props = {}, children = []) {
 }
 
 const button = (text, cls, onclick, key) => el('button', { type: 'button', class: `btn ${cls}`, text, onclick, key });
+
+// A name must contain something other than spaces (ordinary or full-width).
+const nameRule = { pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 };
 
 function isOpen(kind, taskId, stepId) {
   return open !== null && open.kind === kind && open.taskId === taskId && open.stepId === stepId;
@@ -52,6 +55,7 @@ const UNDO_TEXT = {
   removeStep: '已删除步骤',
   dismissSuggestion: '已忽略建议',
   acceptSuggestion: '已采纳建议',
+  setStepDone: '已完成并归档',
 };
 const UNDO_SECONDS = 8;
 let undoTimer = null;
@@ -87,16 +91,18 @@ function announceOrganize(before, after) {
 }
 
 function applyState(next) {
-  if (dragging) {
-    pendingState = next;
-    return;
-  }
   announceOrganize(state?.organize, next.organize);
   state = next;
   render();
 }
 
 // ---- text helpers ----
+
+const pad = (n) => String(n).padStart(2, '0');
+const monthDay = (iso) => {
+  const d = new Date(iso);
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 // Just the urgency, without the date: for the collapsed strip.
 function remainingText(task) {
@@ -108,21 +114,15 @@ function remainingText(task) {
 }
 
 function dueText(task) {
-  if (task.state === 'done') return '已完成';
+  if (task.state === 'done') return `${monthDay(task.completedAt)} 完成`;
   if (task.state === 'none') return '无截止日期';
-  let remaining;
-  if (task.state === 'overdue') remaining = task.days < 0 ? `已过期 ${-task.days} 天` : '已过期';
-  else if (task.days === 0) remaining = '今天截止';
-  else if (task.days === 1) remaining = '明天截止';
-  else remaining = `还剩 ${task.days} 天`;
-  return `${task.due} · ${remaining}`;
+  return `${task.due} · ${remainingText(task)}`;
 }
 
-function updatedText(item) {
-  if (!item.updatedBy) return '尚未更新';
-  const d = new Date(item.updatedAt);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${item.updatedBy} · ${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function updatedText(step) {
+  if (!step.updatedBy) return step.done ? '已完成' : '未开始';
+  const d = new Date(step.updatedAt);
+  return `${step.updatedBy} · ${monthDay(step.updatedAt)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function dueFromForm(form) {
@@ -134,18 +134,22 @@ function dueFromForm(form) {
 
 // ---- pieces ----
 
-function taskForm({ key, task, submitLabel, onSubmit, onCancel }) {
+// withFirstStep: a new task needs its first step; editing an existing task does not ask for one.
+function taskForm({ key, task, submitLabel, withFirstStep, onSubmit, onCancel }) {
   const [date = '', time = ''] = (task?.due ?? '').split(' ');
   const form = el('form', {
     class: 'card-form',
     onsubmit: (event) => {
       event.preventDefault();
       const name = form.elements.name.value.trim();
-      if (name) onSubmit({ name, due: dueFromForm(form) });
+      const firstStep = withFirstStep ? form.elements.step.value.trim() : null;
+      if (!name || (withFirstStep && !firstStep)) return;
+      onSubmit({ name, due: dueFromForm(form), ...(withFirstStep ? { steps: [firstStep] } : {}) });
     },
     onkeydown: (event) => { if (event.key === 'Escape') onCancel(); },
   }, [
-    el('input', { type: 'text', name: 'name', key: `${key}-name`, value: task?.name ?? '', placeholder: '任务名称', 'aria-label': '任务名称', required: true, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
+    el('input', { type: 'text', name: 'name', key: `${key}-name`, value: task?.name ?? '', placeholder: '任务名称', 'aria-label': '任务名称', required: true, ...nameRule }),
+    withFirstStep && el('input', { type: 'text', name: 'step', key: `${key}-step`, placeholder: '第一个步骤（之后可以再加）', 'aria-label': '第一个步骤', required: true, ...nameRule }),
     el('input', {
       type: 'date',
       name: 'date',
@@ -161,29 +165,6 @@ function taskForm({ key, task, submitLabel, onSubmit, onCancel }) {
   return form;
 }
 
-function slider({ key, label, percent, onCommit, pct }) {
-  return el('input', {
-    type: 'range',
-    min: 0,
-    max: 100,
-    step: 1,
-    value: percent,
-    key,
-    'aria-label': label,
-    'aria-valuetext': `${percent}%`,
-    onpointerdown: () => { dragging = true; },
-    oninput: (event) => {
-      pct.textContent = `${event.target.value}%`;
-      event.target.setAttribute('aria-valuetext', `${event.target.value}%`);
-    },
-    onchange: (event) => {
-      dragging = false;
-      pendingState = null; // the result of this commit is newer
-      onCommit(Number(event.target.value));
-    },
-  });
-}
-
 function confirmRow(question, onConfirm, onCancel) {
   return el('div', { class: 'row' }, [
     el('span', { class: 'meta', text: question }),
@@ -195,8 +176,7 @@ function confirmRow(question, onConfirm, onCancel) {
 function stepItem(task, step) {
   const ids = { taskId: task.id, stepId: step.id };
   const base = `step-${task.id}-${step.id}`;
-  const pct = el('span', { class: 'pct', text: `${step.percent}%` });
-  const item = el('li', { class: `step${step.percent === 100 ? ' finished' : ''}` });
+  const item = el('li', { class: `step${step.done ? ' finished' : ''}` });
 
   if (isOpen('rename-step', task.id, step.id)) {
     const form = el('form', {
@@ -207,7 +187,7 @@ function stepItem(task, step) {
       },
       onkeydown: (event) => { if (event.key === 'Escape') setOpen(null, `${base}-rename`); },
     }, [
-      el('input', { type: 'text', name: 'name', key: `${base}-name`, value: step.name, 'aria-label': '步骤名称', required: true, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
+      el('input', { type: 'text', name: 'name', key: `${base}-name`, value: step.name, 'aria-label': '步骤名称', required: true, ...nameRule }),
       el('button', { type: 'submit', class: 'btn small primary', text: '保存' }),
       button('取消', 'small', () => setOpen(null, `${base}-rename`)),
     ]);
@@ -215,20 +195,20 @@ function stepItem(task, step) {
     return item;
   }
 
-  item.append(
-    el('div', { class: 'step-top' }, [
-      el('span', { class: 'step-number', title: `步骤编号 ${step.id}`, text: String(step.id) }),
-      el('span', { class: 'name', text: step.name }),
-      pct,
-    ]),
-    slider({
-      key: `${base}-range`,
-      label: `「${step.name}」的进度`,
-      percent: step.percent,
-      pct,
-      onCommit: (percent) => act('setStepProgress', { ...ids, percent }),
-    }),
-  );
+  // Ticking the last unfinished step finishes the task, which then moves to the archive.
+  const check = el('input', {
+    type: 'checkbox',
+    class: 'step-check',
+    key: `${base}-check`,
+    checked: step.done,
+    'aria-label': `步骤 ${step.id}「${step.name}」已完成`,
+    onchange: (event) => act('setStepDone', { ...ids, done: event.target.checked }, task.name),
+  });
+  item.append(el('label', { class: 'step-top' }, [
+    check,
+    el('span', { class: 'step-number', title: `步骤编号 ${step.id}`, text: String(step.id) }),
+    el('span', { class: 'name', text: step.name }),
+  ]));
 
   if (isOpen('confirm-step', task.id, step.id)) {
     item.append(confirmRow(`删除步骤「${step.name}」？`, async () => {
@@ -237,11 +217,11 @@ function stepItem(task, step) {
       focusKey(`task-${task.id}-head`);
     }, () => setOpen(null, `${base}-rm`)));
   } else {
-    item.append(el('div', { class: 'row' }, [
+    item.append(el('div', { class: 'row step-meta' }, [
       el('span', { class: 'meta', text: updatedText(step) }),
-      step.percent < 100 && button('完成', 'small', () => act('setStepProgress', { ...ids, percent: 100 }), `${base}-done`),
       button('改名', 'small', () => setOpen({ kind: 'rename-step', ...ids }, `${base}-name`), `${base}-rename`),
-      button('删除', 'small', () => setOpen({ kind: 'confirm-step', ...ids }, 'confirm-no'), `${base}-rm`),
+      // A task keeps at least one step; to drop the task, delete the task.
+      task.steps.length > 1 && button('删除', 'small', () => setOpen({ kind: 'confirm-step', ...ids }, 'confirm-no'), `${base}-rm`),
     ]));
   }
   return item;
@@ -250,27 +230,11 @@ function stepItem(task, step) {
 function taskBody(task) {
   const base = `task-${task.id}`;
   const body = el('div', { class: 'task-body' });
-
-  if (task.steps.length > 0) {
-    const finished = task.steps.filter((step) => step.percent === 100).length;
-    body.append(
-      el('div', { class: 'steps-label', text: `步骤 · 已完成 ${finished} / ${task.steps.length}` }),
-      el('ul', { class: 'steps' }, task.steps.map((step) => stepItem(task, step))),
-    );
-  } else {
-    const pct = el('span', { class: 'pct', text: `${task.progress}%` });
-    body.append(
-      el('div', { class: 'step-top' }, [el('span', { class: 'hint', text: '没有步骤，可直接设置任务进度' }), pct]),
-      slider({
-        key: `${base}-range`,
-        label: `「${task.name}」的进度`,
-        percent: task.progress,
-        pct,
-        onCommit: (percent) => act('setTaskProgress', { taskId: task.id, percent }),
-      }),
-      el('div', { class: 'row' }, [el('span', { class: 'meta', text: updatedText(task) })]),
-    );
-  }
+  const finished = task.steps.filter((step) => step.done).length;
+  body.append(
+    el('div', { class: 'steps-label', text: `步骤 · 已完成 ${finished} / ${task.steps.length}` }),
+    el('ul', { class: 'steps' }, task.steps.map((step) => stepItem(task, step))),
+  );
 
   const stepForm = el('form', {
     onsubmit: async (event) => {
@@ -283,7 +247,7 @@ function taskBody(task) {
       focusKey(`${base}-newstep`);
     },
   }, [
-    el('input', { type: 'text', name: 'name', key: `${base}-newstep`, placeholder: '添加步骤…', 'aria-label': `为「${task.name}」添加步骤`, pattern: '.*[^ 　].*', title: '名称不能只有空格', maxlength: 200 }),
+    el('input', { type: 'text', name: 'name', key: `${base}-newstep`, placeholder: '添加步骤…', 'aria-label': `为「${task.name}」添加步骤`, ...nameRule }),
     el('button', { type: 'submit', class: 'btn', text: '添加' }),
   ]);
   body.append(stepForm);
@@ -344,7 +308,7 @@ function taskCard(task) {
   return el('section', { class: `task ${task.state}${isExpanded ? ' open' : ''}` }, [head, isExpanded && taskBody(task)]);
 }
 
-// ---- suggestions and the one-time organize card ----
+// ---- suggestions and the organize card ----
 
 const settling = new Set();
 
@@ -411,7 +375,7 @@ function organizeCard() {
         el('p', {}, [el('strong', { text: `更新了 ${updated.length} 个已有任务` })]),
         el('ul', { class: 'suggested-steps' }, updated.map((task) => el('li', {
           text: `${task.name}：${[
-            task.advancedSteps > 0 && `${task.advancedSteps} 个步骤有进展`,
+            task.advancedSteps > 0 && `完成了 ${task.advancedSteps} 个步骤`,
             task.addedSteps > 0 && `新增 ${task.addedSteps} 个步骤`,
           ].filter(Boolean).join('，')}`,
         }))),
@@ -439,7 +403,7 @@ function organizeCard() {
   }
   return card([
     el('p', {}, [el('strong', { text: '从最近的对话里整理任务' })]),
-    el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话。列表里已有的任务会直接更新步骤和进度；新的项目列成建议，由你决定是否采纳。' }),
+    el('p', { class: 'hint', text: '让 Claude Code 读一遍你最近 7 天对 Claude Code 和 DeepSeek Harness 说过的话。列表里已有的任务会直接勾掉做完的步骤、补上缺少的步骤；新的项目列成建议，由你决定是否采纳。' }),
     el('p', { class: 'hint', text: '这些话的摘要会发送给 Claude 的模型，每次整理都会消耗你的额度。' }),
     el('div', { class: 'row' }, [
       button('开始整理', 'primary', () => api.organize('start'), 'organize-start'),
@@ -448,7 +412,16 @@ function organizeCard() {
   ]);
 }
 
+function showPage(next) {
+  page = next;
+  expanded.clear();
+  open = null;
+  content.scrollTop = 0;
+  render();
+}
+
 function openAddForm() {
+  page = 'tasks';
   setOpen({ kind: 'add-task' }, 'add-name');
 }
 
@@ -462,14 +435,57 @@ function errorPanel() {
   ]);
 }
 
+// The open tasks, with the organize card, the add form and pending suggestions above them.
+function tasksPage() {
+  const nodes = [organizeCard()];
+  if (isOpen('add-task')) {
+    nodes.push(taskForm({
+      key: 'add',
+      submitLabel: '添加',
+      withFirstStep: true,
+      onSubmit: async (task) => {
+        if (await act('addTask', task)) {
+          setOpen(null);
+          document.getElementById('add-task').focus();
+        }
+      },
+      onCancel: () => {
+        setOpen(null);
+        document.getElementById('add-task').focus();
+      },
+    }));
+  }
+  nodes.push(suggestionsSection());
+  if (state.tasks.length === 0 && nodes.every((node) => !node)) {
+    nodes.push(el('div', { class: 'panel' }, [
+      el('p', { text: state.archive.length > 0 ? '没有待办任务，都做完了。' : '还没有任务。' }),
+      button(state.archive.length > 0 ? '添加任务' : '添加第一个任务', 'primary', openAddForm, 'empty-add'),
+    ]));
+  }
+  nodes.push(...state.tasks.map(taskCard));
+  return nodes;
+}
+
+// Tasks finished in the last week. Unticking a step, or adding one, sends a task back to the list.
+function archivePage() {
+  const nodes = [el('h2', { class: 'page-title', text: '最近 7 天完成的任务' })];
+  if (state.archive.length === 0) {
+    nodes.push(el('div', { class: 'panel' }, [el('p', { text: '最近 7 天没有完成的任务。' })]));
+  } else {
+    nodes.push(...state.archive.map(taskCard));
+  }
+  nodes.push(el('p', { class: 'hint page-note', text: '任务的所有步骤完成后自动归档。更早完成的任务仍保存着，可用 task list --archived 查看。' }));
+  return nodes;
+}
+
 // ---- render ----
 
 // Remembers focus and half-typed input so a refresh from disk does not interrupt the user.
+const TEXT_INPUTS = 'input[data-key]:not([type="checkbox"])';
+
 function snapshot() {
   const values = new Map();
-  for (const input of content.querySelectorAll('input[data-key]:not([type="range"])')) {
-    values.set(input.dataset.key, input.value);
-  }
+  for (const input of content.querySelectorAll(TEXT_INPUTS)) values.set(input.dataset.key, input.value);
   const active = document.activeElement;
   return {
     values,
@@ -479,20 +495,20 @@ function snapshot() {
   };
 }
 
-function restore({ values, focusKey, selection, scrollTop }) {
-  for (const input of content.querySelectorAll('input[data-key]:not([type="range"])')) {
+function restore({ values, focusKey: key, selection, scrollTop }) {
+  for (const input of content.querySelectorAll(TEXT_INPUTS)) {
     if (values.has(input.dataset.key)) input.value = values.get(input.dataset.key);
     if (input.type === 'time') input.disabled = !input.form.elements.date.value;
   }
   content.scrollTop = scrollTop;
-  if (!focusKey) return;
-  const target = content.querySelector(`[data-key="${focusKey}"]`);
+  if (!key) return;
+  const target = content.querySelector(`[data-key="${key}"]`);
   if (!target) return;
   target.focus();
   if (selection && target.type === 'text') target.setSelectionRange(...selection);
 }
 
-// The collapsed window: one line about the next task that is not finished.
+// The collapsed window: one line about the next task.
 function renderStrip(broken) {
   const strip = document.getElementById('strip');
   const fill = document.getElementById('strip-fill');
@@ -501,7 +517,7 @@ function renderStrip(broken) {
   if (broken) {
     parts.push(el('span', { class: 'strip-name', text: '无法读取任务数据' }));
   } else {
-    const next = state.tasks.find((task) => task.state !== 'done');
+    const [next] = state.tasks;
     if (next) {
       percent = next.progress;
       parts.push(
@@ -522,11 +538,18 @@ function renderStrip(broken) {
 
 function renderChrome(broken) {
   const compact = state.compact === true;
+  const archive = page === 'archive';
   document.body.classList.toggle('compact', compact);
   document.querySelector('.bar h1').hidden = compact;
+  document.querySelector('.bar h1').textContent = archive ? '归档' : '任务';
   document.getElementById('strip').hidden = !compact;
-  document.getElementById('organize').hidden = compact;
-  document.getElementById('add-task').hidden = compact;
+  for (const id of ['toggle-archive', 'organize', 'add-task']) document.getElementById(id).hidden = compact;
+  document.getElementById('add-task').disabled = broken;
+  document.getElementById('organize').disabled = broken || state.organize?.phase === 'running';
+  const archiveButton = document.getElementById('toggle-archive');
+  archiveButton.disabled = broken;
+  archiveButton.textContent = archive ? '返回任务' : '归档';
+  archiveButton.title = archive ? '返回未完成的任务' : '最近 7 天完成的任务';
   const toggle = document.getElementById('toggle-compact');
   const label = compact ? '展开窗口' : '收起为窄栏';
   toggle.classList.toggle('flipped', compact);
@@ -540,60 +563,11 @@ function render() {
   const before = snapshot();
   const broken = state.status !== 'ok';
   renderChrome(broken);
-  document.getElementById('add-task').disabled = broken;
-  document.getElementById('organize').disabled = broken || state.organize?.phase === 'running';
-
-  const nodes = [];
-  if (broken) {
-    nodes.push(errorPanel());
-  } else {
-    if (isOpen('add-task')) {
-      nodes.push(taskForm({
-        key: 'add',
-        submitLabel: '添加',
-        onSubmit: async (task) => {
-          if (await act('addTask', task)) {
-            setOpen(null);
-            document.getElementById('add-task').focus();
-          }
-        },
-        onCancel: () => {
-          setOpen(null);
-          document.getElementById('add-task').focus();
-        },
-      }));
-    }
-    const card = organizeCard();
-    const suggestions = suggestionsSection();
-    nodes.unshift(card);
-    nodes.push(suggestions);
-    if (state.tasks.length === 0 && !card && !suggestions && !isOpen('add-task')) {
-      nodes.push(el('div', { class: 'panel' }, [
-        el('p', { text: '还没有任务。' }),
-        button('添加第一个任务', 'primary', openAddForm, 'empty-add'),
-      ]));
-    }
-    nodes.push(...state.tasks.map(taskCard));
-  }
+  let nodes;
+  if (broken) nodes = [errorPanel()];
+  else nodes = page === 'archive' ? archivePage() : tasksPage();
   content.replaceChildren(...nodes.filter(Boolean));
   restore(before);
-  followOpenTask();
-}
-
-// Finishing a task moves it to the end of the list; without this it would vanish
-// from under the user while still open.
-// Only when the open task itself changed state: other tasks coming and going above it
-// must not move the view.
-let lastOpen = { id: null, done: false };
-
-function followOpenTask() {
-  const [id] = expanded;
-  const task = state.status === 'ok' ? state.tasks.find((candidate) => candidate.id === id) : undefined;
-  const done = task?.state === 'done';
-  if (task && id === lastOpen.id && done !== lastOpen.done) {
-    content.querySelector(`[data-key="task-${id}-head"]`)?.scrollIntoView({ block: 'start' });
-  }
-  lastOpen = { id: id ?? null, done };
 }
 
 // ---- wiring ----
@@ -601,28 +575,14 @@ function followOpenTask() {
 document.getElementById('add-task').addEventListener('click', openAddForm);
 document.getElementById('hide-window').addEventListener('click', () => api.hide());
 document.getElementById('toggle-compact').addEventListener('click', () => api.setCompact(!state?.compact));
+document.getElementById('toggle-archive').addEventListener('click', () => showPage(page === 'archive' ? 'tasks' : 'archive'));
 document.getElementById('undo-button').addEventListener('click', () => act('undo'));
 // Shows the organize card; nothing runs until the user confirms there.
 document.getElementById('organize').addEventListener('click', () => {
+  if (page !== 'tasks') showPage('tasks');
   api.organize('open');
   content.scrollTop = 0;
 });
-
-// A drag can end outside the slider without a change event.
-function endDrag() {
-  if (!dragging) return;
-  dragging = false;
-  // Wait a tick: if this drag committed a value, its change event clears pendingState first.
-  setTimeout(() => {
-    if (!pendingState) return;
-    const next = pendingState;
-    pendingState = null;
-    applyState(next);
-  }, 0);
-}
-window.addEventListener('pointerup', endDrag);
-window.addEventListener('pointercancel', endDrag);
-window.addEventListener('blur', endDrag);
 
 api.onState(applyState);
 api.read().then(applyState);

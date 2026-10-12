@@ -1,8 +1,8 @@
-# 让 Agent 更新任务进度 / Agent integration
+# 让 Agent 更新任务 / Agent integration
 
 [English summary](#english-summary)
 
-taskboard 不给 Agent 写插件。Agent 通过执行 `task` 命令来更新进度，所以任何能运行 shell 命令的 Agent 都能接入。这里提供 Claude Code 和 DeepSeek Harness 的现成模板，两者都是一个 skill 文件，告诉 Agent 什么时候、怎么调用 `task`。
+taskboard 不给 Agent 写插件。Agent 通过执行 `task` 命令来勾选做完的步骤，所以任何能运行 shell 命令的 Agent 都能接入。这里提供 Claude Code 和 DeepSeek Harness 的现成模板，两者都是一个 skill 文件，告诉 Agent 什么时候、怎么调用 `task`。
 
 安装 taskboard 本身不会改动任何 Agent 的配置。下面的复制命令需要你自己执行。
 
@@ -13,19 +13,20 @@ taskboard 不给 Agent 写插件。Agent 通过执行 `task` 命令来更新进�
 | 署名 | `claude` | `deepseek` | `user` |
 
 - Agent 只用 `task` 命令，不直接编辑数据文件。
-- 只有在你说明"现在做的是哪个任务"之后，Agent 才更新进度。
+- 步骤只有完成和未完成。只有在你说明"现在做的是哪个任务"之后，Agent 才会把做完的步骤标为完成；做了一半的步骤不会被标。
+- 任务的所有步骤完成后自动归档，Agent 不需要也不能手动归档。
 - Agent 不会自行创建、改名或删除任务和步骤，除非你要求。
 
 - Agent 自己从对话里归纳出的新任务只能作为"建议"提出，由你在小窗口里采纳或忽略。
-- 整理时，Agent 可以直接更新已有任务：把对话显示已完成的步骤标为完成、补上缺少的步骤。它只向前推进进度，不删除也不改名，每次更新都有署名。
+- 整理时，Agent 可以直接更新已有任务：把对话显示已完成的步骤标为完成、补上缺少的步骤。它只把步骤标为完成，不会改回未完成，不删除也不改名，每次更新都有署名。
 
 在会话里可以这样说：
 
 | 你说 | Agent 做什么 |
 |---|---|
-| "现在做任务 3，做完一步就更新进度" | 干活的同时更新任务 3 的步骤进度 |
-| "加一个任务：周五前交报销单，分成填表和找发票两步" | 直接创建任务和步骤 |
-| "整理一下任务" | 读取最近的对话摘要：已有的任务直接更新步骤和进度，新的项目列为建议 |
+| "现在做任务 3，做完一步就更新" | 干活的同时把任务 3 里做完的步骤标为完成 |
+| "加一个任务：周五前交报销单，分成填表和找发票两步" | 直接创建任务和步骤；你没说步骤时，用一个与任务同名的步骤 |
+| "整理一下任务" | 读取最近的对话摘要：已有的任务直接勾掉做完的步骤、补上缺少的步骤，新的项目列为建议 |
 
 ### 整理任务时的隐私
 
@@ -110,8 +111,8 @@ Agents update taskboard by running the `task` command, so any agent that can run
 - **DeepSeek Harness**: copy `integrations/dsh/taskboard` into `~/.dsh/skills/` (or a project's `.dsh/skills/`). Under the default `workspace-write` permissions, commands that change data may be denied by the sandbox the first time because the data lives in your home directory; approve the escalation prompt. This is based on the DeepSeek Harness package docs and has not been tested end to end. Updates are signed `deepseek`.
 - **Other agents**: put the template body into the agent's instruction file and change the name after `--by`, or set `TASKBOARD_ACTOR`.
 
-Conventions: agents use the `task` command only, update progress only after you say which task the work belongs to, and do not create, rename or delete tasks or steps unless asked. New tasks an agent infers from your conversations are filed as suggestions for you to accept or dismiss. When organizing, an agent may update tasks that already exist: mark steps finished and add missing steps, forward only, signed, never deleting or renaming.
+Conventions: agents use the `task` command only, mark steps done only after you say which task the work belongs to, and do not create, rename or delete tasks or steps unless asked. New tasks an agent infers from your conversations are filed as suggestions for you to accept or dismiss. When organizing, an agent may update tasks that already exist: mark steps finished and add missing steps, only ever marking done, signed, never reopening, deleting or renaming. Steps are either done or not; a task whose steps are all done is archived by itself.
 
-What to say: "this is for task 3, update progress as you go"; "add a task: expense form by Friday, two steps"; "organize my tasks" (the agent runs `task digest`, which sends a digest of what you typed to both agents in the last 7 days to that agent's model provider; say "only look at Claude Code conversations" to limit it).
+What to say: "this is for task 3, tick off steps as you go"; "add a task: expense form by Friday, two steps"; "organize my tasks" (the agent runs `task digest`, which sends a digest of what you typed to both agents in the last 7 days to that agent's model provider; say "only look at Claude Code conversations" to limit it).
 
 **Do not use the taskboard install directory as a DeepSeek Harness workspace.** Its sandbox relabels the folder's files as low integrity, and the Electron runtime inside then crashes on start. To recover on Windows, run `icacls node_modules\electron\dist /setintegritylevel "(OI)(CI)M" /T` in the repository and start `taskboard` again.

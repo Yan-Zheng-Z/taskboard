@@ -25,7 +25,7 @@ export const ORGANIZE_PROMPT = [
   'For a project that is already a task in the list, update that task instead of suggesting a new one:',
   'mark a step finished with task done TASK STEP --by claude when the conversation shows it is finished,',
   'and add a stage that is missing with task step add TASK NAME, then mark it finished too if it already is.',
-  'Never delete or rename anything, never lower progress, and leave tasks the conversations do not mention alone.',
+  'Never delete or rename anything, never reopen a step, and leave tasks the conversations do not mention alone.',
   'For a project that is not in the list, file a suggestion: name it after the overall goal,',
   'give it three to seven steps that are its main stages in order,',
   'using --done-step for finished stages and --step for stages still to do,',

@@ -402,3 +402,31 @@ input[type="range"] {
 /* Task and step ids are the ones the command line and the agents use. */
 .task-id { margin-right: 6px; color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .step-number { min-width: 16px; width: auto; padding: 0 4px; border-radius: 8px; }
+
+/* ---- steps as checkboxes, and the archive page ---- */
+
+.step-top { align-items: flex-start; gap: 8px; cursor: pointer; }
+
+.step-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.step.finished .name { text-decoration: line-through; }
+.step.finished .step-number { background: var(--track); color: var(--muted); }
+.step-meta { margin-top: 2px; padding-left: 24px; }
+
+.page-title {
+  margin: 4px 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.page-note { margin: 12px 4px 0; }
+.task.done .meter span { background: var(--done); }
