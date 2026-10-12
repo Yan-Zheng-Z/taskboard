@@ -1,0 +1,25 @@
+{
+  "name": "taskboard",
+  "version": "0.1.0",
+  "description": "A desktop task widget that you and your coding agents (Claude Code, DeepSeek Harness) update together.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "task": "src/cli/main.js",
+    "taskboard": "src/widget/launch.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint .",
+    "start": "node src/widget/launch.js",
+    "prepare": "git config core.hooksPath .githooks || exit 0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
+  }
+}
