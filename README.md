@@ -26,7 +26,7 @@
 需要 [Node.js](https://nodejs.org/) 22.15 或更高版本和 Git。
 
 ```
-git clone https://github.com/zyz122302-lang/taskboard.git
+git clone https://github.com/Yan——Zheng——Z/taskboard.git
 cd taskboard
 npm install
 npm link
